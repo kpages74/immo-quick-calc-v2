@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Immo Quick-Calc 2.0</title>
+  <meta name="description" content="Schnellkalkulation: maximaler Einkaufspreis, Marge und Gesamtinvestition für Immobilien.">
+  <meta name="theme-color" content="#0f2949">
+  <meta name="color-scheme" content="dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Quick-Calc 2">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <main>
+
+      <!-- Rechner: Eingaben links, Ergebnis rechts (ab 900 px), auf dem Handy oben stehend -->
+      <section id="view-rechner" class="view" aria-label="Rechner">
+        <header class="topbar">
+          <img class="logo" src="icons/logo.png" width="504" height="188" alt="Elegnt Living QuickCalc">
+        </header>
+
+        <div class="controls">
+          <div class="seg seg-main" id="seg-kind" role="group" aria-label="Nutzungsart">
+            <button type="button" class="seg-btn" data-kind="vermietet" aria-pressed="false">Vermietet</button>
+            <button type="button" class="seg-btn" data-kind="leer" aria-pressed="false">Leerstehend</button>
+            <button type="button" class="seg-btn" data-kind="wg" aria-pressed="false">WG</button>
+          </div>
+          <div class="seg seg-sub" id="seg-sub" role="group" aria-label="Unterart bei Leerstehend" hidden>
+            <button type="button" class="seg-btn" data-kind="kap" aria-pressed="false">Kapitalanleger</button>
+            <button type="button" class="seg-btn" data-kind="en" aria-pressed="false">Eigennutzer</button>
+          </div>
+          <div class="seg seg-mode" id="seg-mode" role="group" aria-label="Modus">
+            <button type="button" class="seg-btn" data-mode="max" aria-pressed="true">Maximum ermitteln</button>
+            <button type="button" class="seg-btn" data-mode="check" aria-pressed="false">Angebot prüfen</button>
+          </div>
+          <div class="actions" id="actions" role="group" aria-label="Aktionen">
+            <button type="button" class="btn action-btn" id="btn-save">Speichern</button>
+            <button type="button" class="btn action-btn" id="btn-pdf">PDF</button>
+            <button type="button" class="btn action-btn" id="btn-share" aria-label="Link teilen">Teilen</button>
+            <button type="button" class="btn action-btn" id="btn-new">Neu</button>
+          </div>
+          <p class="save-state" id="save-state" aria-live="polite"></p>
+        </div>
+
+        <div class="split">
+          <aside class="side">
+            <section id="result" class="result" aria-label="Ergebnis" data-ampel="gruen">
+              <div id="result-body" class="result-body" aria-live="polite"></div>
+            </section>
+            <div id="result-notes" class="notes-box" aria-live="polite" hidden></div>
+          </aside>
+          <div class="main-col">
+            <div id="form" class="form"></div>
+          </div>
+        </div>
+
+        <p class="app-version">Version 2.0</p>
+      </section>
+
+      <!-- Objekte: speichern, suchen, öffnen, duplizieren, löschen -->
+      <section id="view-objekte" class="view" aria-label="Objekte" hidden>
+        <h1 class="page-title">Objekte</h1>
+        <div id="objects-body"></div>
+      </section>
+
+      <!-- Einstellungen: Standardwerte, Preisliste, Sicherung, Zurücksetzen -->
+      <section id="view-einstellungen" class="view" aria-label="Einstellungen" hidden>
+        <h1 class="page-title">Einstellungen</h1>
+        <div id="settings-body"></div>
+        <p class="version">Immo Quick-Calc 2.0 · Cache iqc2-v2</p>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="status" class="status" role="status" aria-live="polite"></div>
+
+  <nav class="tabbar glass" aria-label="Bereiche">
+    <button type="button" class="tab" data-view="rechner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M8.5 7.5h7M8.5 11.5h2M13.5 11.5h2M8.5 15.5h2M13.5 15.5h2"/>
+      </svg>
+      <span>Rechner</span>
+    </button>
+    <button type="button" class="tab" data-view="objekte">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 10.5 12 4l8 6.5V20H4z"/><path d="M10 20v-5h4v5"/>
+      </svg>
+      <span>Objekte</span>
+    </button>
+    <button type="button" class="tab" data-view="einstellungen">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M4.6 7.4l2.1 1.2M17.3 15.4l2.1 1.2M4.6 16.6l2.1-1.2M17.3 8.6l2.1-1.2"/>
+      </svg>
+      <span>Einstellungen</span>
+    </button>
+  </nav>
+
+  <!-- Allgemeiner Bestätigungsdialog (Titel, Text und Knopf werden aus dem Skript gesetzt) -->
+  <dialog id="dlg-confirm" aria-labelledby="confirm-title">
+    <h2 id="confirm-title" class="dlg-title"></h2>
+    <p id="confirm-text" class="set-foot"></p>
+    <div class="dlg-actions">
+      <button type="button" class="btn" id="btn-confirm-cancel">Abbrechen</button>
+      <button type="button" class="btn" id="btn-confirm-ok">OK</button>
+    </div>
+  </dialog>
+
+  <!-- Link zum Teilen, wenn Teilen und Kopieren nicht möglich sind -->
+  <dialog id="dlg-link" aria-labelledby="link-title">
+    <h2 id="link-title" class="dlg-title">Link zum Teilen</h2>
+    <p class="set-foot">Den Link markieren und kopieren.</p>
+    <input type="text" id="link-field" class="text-input link-field" readonly aria-label="Link zum Teilen">
+    <div class="dlg-actions">
+      <button type="button" class="btn" id="btn-link-close">Schließen</button>
+    </div>
+  </dialog>
+
+  <noscript><p class="noscript">Diese Seite benötigt JavaScript.</p></noscript>
+  <script type="module" src="js/ui/app.js"></script>
+</body>
+</html>

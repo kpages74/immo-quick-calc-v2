@@ -1,0 +1,937 @@
+/* Immo Quick-Calc 2.0. Dunkles Design: Hintergrund #0f2949, Schrift und Akzent #FAEEC8. */
+:root {
+  --bg: #0f2949;
+  --card: #163a64;
+  --accent: #FAEEC8;
+  --on-accent: #0f2949;
+  --text: #FAEEC8;
+  --secondary: #C8C2AC;
+  --field-border: rgba(250, 238, 200, 0.45);
+  --divider: rgba(250, 238, 200, 0.18);
+  --seg-bg: #0c213a;
+  --track: #2a4a72;
+  --green: #6FE3A0;
+  --yellow: #F7D154;
+  --red: #FF8A7A;
+  --pad: 20px;
+  color-scheme: dark;
+}
+
+@media (max-width: 400px) {
+  :root { --pad: 16px; }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html { background: var(--bg); -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #13335c 0, var(--bg) 320px) no-repeat, var(--bg);
+  color: var(--text);
+  font-family: -apple-system, system-ui, "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.noscript { padding: 24px; text-align: center; }
+
+/* Layout: maximal 1100 px breit, zentriert, Safe-Area beachten. */
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding-left: calc(var(--pad) + env(safe-area-inset-left, 0px));
+  padding-right: calc(var(--pad) + env(safe-area-inset-right, 0px));
+}
+
+/* Jede Ansicht hat Abstand unten für die feste Leiste. */
+.view {
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0 4px;
+}
+
+.logo {
+  display: block;
+  width: 150px;
+  max-width: 70%;
+  height: auto;
+}
+
+/* Dezente Versionszeile unter dem Rechner, über die volle Breite */
+.app-version {
+  margin: 24px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--secondary);
+}
+
+/* Fragezeichen neben Beschriftungen: sichtbar 24 px, Tippfläche 44 × 44 px, Zeilenhöhe bleibt */
+.label-line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.label-line .label { min-width: 0; }
+
+.help-btn {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin: -10px -10px -10px 0;
+  border-radius: 50%;
+  color: var(--secondary);
+}
+
+.help-btn::before {
+  content: "?";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border: 1px solid var(--field-border);
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+}
+
+.help-btn[aria-expanded="true"]::before {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Erklärungskasten: direkt unter dem Feld bzw. dem Hinweis, volle Breite, Lesegröße */
+.help-box {
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  background: var(--seg-bg);
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.notes-item .help-btn { display: inline-block; vertical-align: middle; margin: -10px -10px -10px 4px; }
+
+/* Umschalter (Kapsel) */
+.controls { display: block; }
+
+.seg {
+  display: flex;
+  gap: 4px;
+  min-height: 50px;
+  padding: 3px;
+  margin-top: 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--accent);
+  background: var(--seg-bg);
+}
+
+.seg-sub { min-height: 46px; }
+
+.seg-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.15;
+  text-align: center;
+}
+
+.seg-btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 700;
+}
+
+@media (max-width: 360px) {
+  .seg-main .seg-btn { font-size: 14px; padding: 0 3px; }
+  .seg-mode .seg-btn { font-size: 14px; }
+}
+
+/* Ergebnis: auf dem Handy steht nur die Karte oben, die Hinweise scrollen darunter mit.
+   Die Karte belegt höchstens 40 % der Höhe, bei Fensterhöhe unter 740 px 52 %. */
+.split { display: block; }
+
+.side { display: contents; }
+
+.result {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 5;
+  margin-top: 12px;
+  max-height: 40vh;
+  max-height: 40svh;
+  overflow-y: auto;
+  padding: 10px 14px;
+  border: 1px solid var(--field-border);
+  border-radius: 18px;
+  background: rgba(22, 58, 100, 0.92);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .result { background: var(--card); }
+}
+
+.result[data-ampel="gruen"] { border-color: var(--green); }
+.result[data-ampel="gelb"] { border-color: var(--yellow); }
+.result[data-ampel="rot"] { border-color: var(--red); }
+
+.hero { display: flex; flex-direction: column; min-width: 0; }
+
+.hero .cap,
+.cell .cap {
+  font-size: 13px;
+  line-height: 1.25;
+  color: var(--secondary);
+}
+
+.hero-fig {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.hero .sub { font-size: 14px; line-height: 1.3; color: var(--secondary); }
+
+.verdict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.verdict-text { min-width: 0; }
+
+.dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--secondary);
+}
+
+.dot-gruen { background: var(--green); }
+.dot-gelb { background: var(--yellow); }
+.dot-rot { background: var(--red); }
+
+.cells {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  margin-top: 8px;
+}
+
+.cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cell .fig {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.cell .sub { font-size: 13px; line-height: 1.3; color: var(--secondary); white-space: nowrap; overflow: hidden; }
+
+.delta { margin: 8px 0 0; font-size: 15px; font-weight: 600; }
+
+.limit { margin: 8px 0 0; font-size: 13px; color: var(--secondary); }
+
+/* Hinweise unter der Karte, scrollen mit der Seite */
+.notes-box {
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--seg-bg);
+  border: 1px solid var(--divider);
+}
+
+.notes {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--secondary);
+}
+
+.notes li + li { margin-top: 4px; }
+
+/* Sehr niedriges Fenster: Karte darf etwas mehr Höhe nutzen */
+@media (max-height: 739px) {
+  .result {
+    max-height: 52vh;
+    max-height: 52svh;
+  }
+}
+
+/* Eingaben */
+.form { min-width: 0; }
+
+.group {
+  border-top: 1px solid var(--divider);
+  padding: 4px 0 8px;
+}
+
+.group[open] { padding-bottom: 12px; }
+
+.group-title {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--secondary);
+  cursor: pointer;
+}
+
+.group-title::-webkit-details-marker { display: none; }
+
+.group-title::after {
+  content: "";
+  margin-left: auto;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--secondary);
+  border-bottom: 2px solid var(--secondary);
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+}
+
+.group:not([open]) .group-title::after { transform: rotate(-45deg); }
+
+.group-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 2px;
+}
+
+.std-btn {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid var(--field-border);
+  border-radius: 999px;
+  font-size: 14px;
+  color: var(--secondary);
+}
+
+.row { padding: 8px 0 14px; min-width: 0; }
+
+.row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.label-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.label {
+  min-width: 0;
+  font-size: 16px;
+  line-height: 1.3;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.hint {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--secondary);
+  overflow-wrap: anywhere;
+}
+
+/* Zahlenfeld (Pill): mindestens 44 px hoch */
+.pill {
+  flex: none;
+  width: 128px;
+  height: 44px;
+  padding: 0 12px;
+  margin: 0;
+  border: 1px solid var(--field-border);
+  border-radius: 999px;
+  background: transparent;
+  text-align: center;
+  font-size: 16px;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+
+.pill::placeholder { color: var(--secondary); opacity: 1; }
+
+.pill:focus { border-color: var(--accent); }
+
+/* Schieberegler */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 32px;
+  margin: 6px 0 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+  --pos: 0%;
+}
+
+.slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right,
+    var(--accent) 0%, var(--accent) var(--pos),
+    var(--track) var(--pos), var(--track) 100%);
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -9px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--track);
+}
+
+.slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.slider:focus-visible { outline-offset: 4px; border-radius: 4px; }
+
+/* Schalter (Marge aufweichen) */
+.row-switch .row-head { min-height: 44px; }
+
+.switch {
+  flex: none;
+  position: relative;
+  width: 60px;
+  height: 44px;
+  padding: 6px 0;
+  border-radius: 999px;
+  background-color: var(--track);
+  background-clip: content-box;
+}
+
+.switch.is-on { background-color: rgba(250, 238, 200, 0.45); }
+
+.switch-knob {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+  margin-top: -12px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: transform 0.2s ease;
+}
+
+.switch.is-on .switch-knob { transform: translateX(26px); background: var(--accent); }
+
+/* Textfelder (Objektname, Adresse) */
+.text-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.text-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 12px;
+  background: transparent;
+  font-size: 16px;
+  outline: none;
+}
+
+.text-input:focus { border-color: var(--accent); }
+
+/* Szenarien */
+.scen { margin-top: 4px; }
+
+.scen-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.scen-table th,
+.scen-table td {
+  padding: 8px 4px;
+  text-align: left;
+  border-bottom: 1px solid var(--divider);
+  vertical-align: top;
+}
+
+.scen-table th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--secondary);
+}
+
+.scen-label { white-space: nowrap; }
+
+.scen-table th:not(:first-child) { text-align: right; }
+
+.scen-table .num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.scen-ampel { white-space: nowrap; }
+.scen-ampel .dot { display: inline-block; vertical-align: middle; margin-right: 6px; }
+
+/* Leiste unten (Glaseffekt, mit Rückfall) */
+.tabbar {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  z-index: 20;
+  transform: translateX(-50%);
+  width: min(1100px, 100%);
+  display: flex;
+  justify-content: space-around;
+  gap: 4px;
+  padding: 6px calc(var(--pad) / 2 + env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) calc(var(--pad) / 2 + env(safe-area-inset-left, 0px));
+  border-top: 1px solid var(--divider);
+  background: rgba(15, 41, 73, 0.72);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .tabbar { background: var(--bg); }
+}
+
+.tab {
+  flex: 1 1 0;
+  min-height: 52px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--secondary);
+  border-radius: 12px;
+}
+
+.tab svg { width: 24px; height: 24px; }
+
+.tab[aria-current="page"] { color: var(--accent); font-weight: 700; }
+
+/* Objekte und Einstellungen */
+.page-title {
+  margin: 8px 0 12px;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.empty { font-size: 16px; color: var(--secondary); line-height: 1.45; }
+
+.version { margin: 24px 0 0; font-size: 13px; color: var(--secondary); }
+
+.set-sec { margin-bottom: 8px; }
+
+.set-foot {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--secondary);
+}
+
+.btn {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px;
+  margin-top: 4px;
+  border: 1px solid var(--field-border);
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.btn-danger {
+  color: var(--red);
+  border-color: rgba(255, 138, 122, 0.6);
+}
+
+/* Dialog */
+dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: 88vh;
+  margin: auto;
+  padding: 20px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--field-border);
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+dialog::backdrop { background: rgba(7, 20, 37, 0.6); }
+
+.dlg-title {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.dlg-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.dlg-actions .btn { flex: 1; width: auto; }
+
+/* Ab 900 px: zwei Spalten. Eingaben links, Ergebnis rechts und beim Scrollen stehend. */
+@media (min-width: 900px) {
+  .split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    column-gap: 32px;
+    align-items: start;
+  }
+
+  .main-col { grid-column: 1; grid-row: 1; min-width: 0; }
+
+  /* Ab 900 px steht die ganze rechte Spalte (Karte und Hinweise) beim Scrollen. */
+  .side {
+    display: block;
+    grid-column: 2;
+    grid-row: 1;
+    position: sticky;
+    top: 16px;
+    margin-top: 14px;
+  }
+
+  .result {
+    position: static;
+    margin-top: 0;
+    max-height: calc(100vh - 32px);
+    max-height: calc(100svh - 32px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Szenarien-Tabelle: auf schmalen Handys kompakter, nie breiter als die Seite */
+.scen { overflow-x: auto; }
+@media (max-width: 360px) {
+  .scen-table { font-size: 13px; }
+  .scen-table th, .scen-table td { padding: 8px 2px; }
+  .scen-ampel .dot { margin-right: 3px; }
+}
+
+/* Etappe 4: Aktionsleiste unter den Umschaltern. Immer eine Reihe mit vier gleich breiten, kompakten Knöpfen. */
+.actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.actions .btn {
+  min-width: 0;
+  min-height: 44px;
+  margin-top: 0;
+  padding: 0 4px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+/* Unter 360 px Breite: Schrift 13 px, seitlicher Abstand 2 px, damit „Speichern“ ohne Abschneiden passt. */
+@media (max-width: 359px) {
+  .actions { gap: 4px; }
+  .actions .btn { font-size: 13px; padding: 0 2px; }
+}
+
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+/* Speicherzustand: unter den Knöpfen mit kleinem Abstand. Ist er leer, belegt er keine Höhe. */
+.save-state {
+  min-height: 20px;
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--secondary);
+  text-align: center;
+}
+
+.save-state:empty { min-height: 0; margin: 0; }
+
+/* Erklärtexte: lange Zeichenfolgen (z. B. Spaltennamen der Preisliste) brechen am Rand um. */
+.set-foot { overflow-wrap: anywhere; }
+
+/* Ab 900 px: Knöpfe in den Einstellungen höchstens 420 px breit, linksbündig. */
+@media (min-width: 900px) {
+  .set-sec .btn { max-width: 420px; }
+}
+
+/* Links im Knopf-Stil (Preisatlas) */
+a.btn {
+  display: block;
+  box-sizing: border-box;
+  color: var(--text);
+  text-decoration: none;
+}
+
+/* Statusmeldung über der unteren Leiste. Ohne Text ohne Rahmen, Füllung und Platz. Berührt keine Eingaben. */
+.status {
+  position: fixed;
+  left: 50%;
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  padding: 10px 16px;
+  border: 1px solid var(--field-border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  pointer-events: none;
+}
+
+.status:empty { padding: 0; border: 0; box-shadow: none; }
+
+/* Eingabefelder: Notiz und Link */
+.text-area {
+  min-height: 88px;
+  padding: 10px 12px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.link-field { margin-top: 8px; font-size: 15px; }
+
+/* Bereich Objekte */
+.search-row { margin-bottom: 8px; }
+
+.obj-list { list-style: none; margin: 0; padding: 0; }
+
+.obj-item {
+  min-width: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--divider);
+}
+
+.obj-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.obj-name {
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.obj-open {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.obj-address,
+.obj-meta {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--secondary);
+  overflow-wrap: anywhere;
+}
+
+.obj-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.obj-price { margin: 4px 0 0; font-size: 14px; color: var(--secondary); }
+.obj-price strong { font-size: 16px; color: var(--accent); }
+
+.obj-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.obj-actions .btn {
+  flex: 1 1 96px;
+  width: auto;
+  margin-top: 0;
+  padding: 10px 8px;
+  font-size: 15px;
+}
+
+/* Bereich Einstellungen */
+.set-sec + .set-sec {
+  padding-top: 4px;
+  border-top: 1px solid var(--divider);
+}
+
+.set-title {
+  margin: 16px 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.set-text { margin: 0 0 8px; font-size: 15px; line-height: 1.4; }
+
+.set-sec .btn + .btn { margin-top: 8px; }
+
+.set-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--secondary);
+  overflow-wrap: anywhere;
+}
+
+.set-list li + li { margin-top: 4px; }
+
+.set-errors { color: var(--red); }
+
+/* Datei-Felder bleiben im Dokument, sind aber unsichtbar und nicht tastbar. */
+.file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Richtpreis im Formular */
+.pricebox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pb-title { font-size: 16px; line-height: 1.3; }
+
+.pb-search,
+.pb-results { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.pb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pb-hit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  background: var(--seg-bg);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.pb-hit-name { font-size: 16px; font-weight: 600; }
+.pb-hit-price { font-size: 14px; color: var(--secondary); }
