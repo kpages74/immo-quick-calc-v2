@@ -47,12 +47,18 @@ function context(kind, inputs, options = {}) {
   const area = read(inputs, 'livingArea');
   const parkingRent = read(inputs, 'parkingRent');
   const parkingSalePrice = read(inputs, 'parkingSalePrice');
+  // Stellplatzmiete zählt nur, wenn separat vermietet (Schalter). Bei Eigennutzer nie.
+  const separat = kind !== KIND.EN && inputs?.parkingRentSeparate === true;
+  const parkingRentMonthly = separat
+    ? (kind === KIND.WG ? read(inputs, 'parkingCount') * parkingRent : parkingRent)
+    : 0;
 
-  // Schritt 1: Miete
+  // Schritt 1: Miete. Kernmiete ohne Stellplatz, Stellplatzmiete nur bei separater Vermietung.
   let targetRent = null;
   let targetRentPerSqm = null;
   let currentRentPerSqm = null;
   let monthlyRent = null;
+  let coreAnnualRent = null; // Kern-Jahresmiete ohne Stellplatz, Grundlage der Rendite-Grenze
   let rentalIncome = 0;
   if (kind === KIND.VERMIETET) {
     const rent = read(inputs, 'rent');
@@ -61,26 +67,31 @@ function context(kind, inputs, options = {}) {
     targetRent = scaleRent(sollRent);
     targetRentPerSqm = perSqm(targetRent, area);
     currentRentPerSqm = perSqm(rent, area);
-    monthlyRent = scaleRent(sollRent + parkingRent);
-    rentalIncome = rent + parkingRent; // Ist-Miete, nicht Soll-Miete; Szenario ändert sie nicht
+    monthlyRent = scaleRent(sollRent + parkingRentMonthly);
+    coreAnnualRent = scaleRent(sollRent) * 12;
+    rentalIncome = rent + parkingRentMonthly; // Ist-Miete, nicht Soll-Miete; Szenario ändert sie nicht
   } else if (kind === KIND.KAP) {
     const rentPerSqm = read(inputs, 'rentPerSqm');
-    monthlyRent = scaleRent(area * rentPerSqm + parkingRent);
+    monthlyRent = scaleRent(area * rentPerSqm + parkingRentMonthly);
+    coreAnnualRent = scaleRent(area * rentPerSqm) * 12;
     currentRentPerSqm = rentPerSqm;
   } else if (kind === KIND.WG) {
-    monthlyRent = scaleRent(read(inputs, 'rooms') * read(inputs, 'roomRent') + read(inputs, 'parkingCount') * parkingRent);
+    monthlyRent = scaleRent(read(inputs, 'rooms') * read(inputs, 'roomRent') + parkingRentMonthly);
+    coreAnnualRent = scaleRent(read(inputs, 'rooms') * read(inputs, 'roomRent')) * 12;
   }
   const annualRent = monthlyRent === null ? null : monthlyRent * 12;
 
-  // Schritt 2: Verkaufspreis (gesamt, inkl. Stellplatz)
+  // Schritt 2: Verkaufspreis der Wohnung. Rendite-Grenze nur aus der Kernmiete, ohne Stellplatz.
+  // Der Stellplatz-Verkaufspreis wird nicht zu den Grenzen addiert, sondern erst als Zusatz (salePriceTotal).
   const minYield = read(inputs, 'minYield');
   const maxPerSqm = read(inputs, 'maxSalePricePerSqm');
   let yieldLimit = null;
-  if (kind !== KIND.EN && minYield > 0 && annualRent > 0) {
-    yieldLimit = finiteOrNull(annualRent / (minYield / 100));
+  if (kind !== KIND.EN && minYield > 0 && coreAnnualRent > 0) {
+    yieldLimit = finiteOrNull(coreAnnualRent / (minYield / 100));
   }
+  // m²-Deckel: nur Wohnung × Deckel.
   let capLimit = null;
-  if (maxPerSqm > 0 && area > 0) capLimit = area * maxPerSqm + parkingSalePrice;
+  if (maxPerSqm > 0 && area > 0) capLimit = area * maxPerSqm;
 
   const candidates = [yieldLimit, capLimit].filter((x) => x !== null);
   const salePrice = candidates.length > 0 ? Math.min(...candidates) : null;
@@ -97,8 +108,13 @@ function context(kind, inputs, options = {}) {
     limit = LIMIT.CAP;
   }
   const capMissing = maxPerSqm === 0;
-  const buyerYield = kind !== KIND.EN && salePrice > 0 ? finiteOrNull((annualRent / salePrice) * 100) : null;
-  const salePricePerSqm = salePrice === null ? null : perSqm(salePrice - parkingSalePrice, area);
+  const salePricePerSqm = salePrice === null ? null : perSqm(salePrice, area);
+  // Verkaufspreis mit Stellplatz: nur Zusatz zum Verkauf, der Einkaufspreis hängt nicht davon ab.
+  const salePriceTotal = salePrice === null ? null : salePrice + parkingSalePrice;
+  // Rendite Käufer: Jahresmiete inkl. separater Stellplatzmiete, geteilt durch den Kaufpreis inkl. Stellplatz.
+  const buyerYield = kind !== KIND.EN && salePriceTotal !== null && salePriceTotal > 0
+    ? finiteOrNull((annualRent / salePriceTotal) * 100)
+    : null;
 
   // Schritt 3: Kosten
   // Kaufnebenkosten: Summe der Einzelsätze, dann auf volle Prozent aufgerundet (1e-9 gegen Gleitkommafehler).
@@ -117,6 +133,8 @@ function context(kind, inputs, options = {}) {
   const v = read(inputs, 'salesCommissionPercent') / 100;
   const salesCommission = salePrice === null ? null : salePrice * v;
   const saleNet = salePrice === null ? null : salePrice * (1 - v);
+  // Stellplatz-Verkaufspreis nach Vertriebskosten: zusätzlicher Gewinn, nicht Teil der Marge der Wohnung.
+  const parkingNet = parkingSalePrice * (1 - v);
 
   // Schritt 4: Marge
   const targetMargin = read(inputs, 'targetMargin');
@@ -150,6 +168,8 @@ function context(kind, inputs, options = {}) {
     capLimit,
     salePrice,
     salePricePerSqm,
+    salePriceTotal,
+    parkingNet,
     limit,
     buffer,
     capMissing,
@@ -167,6 +187,7 @@ function context(kind, inputs, options = {}) {
     otherCosts,
     holdingCosts,
     rentalIncome,
+    parkingRentMonthly,
     salesCommission,
     saleNet,
     v,
@@ -196,9 +217,17 @@ function evaluateWith(c, P) {
   const marginPercent = hasSale && totalInvestment > 0 ? (profit / totalInvestment) * 100 : null;
   const ampel = trafficLight(marginPercent, profit, c.inputs);
   const requiredSalePrice = c.v < 1 ? ((1 + RULE_MARGIN / 100) * totalInvestment) / (1 - c.v) : null;
+  // Gewinn mit Stellplatz: Gewinn der Wohnung plus Stellplatz-Verkaufspreis nach Vertriebskosten.
+  const profitTotal = hasSale ? profit + c.parkingNet : null;
+  const marginTotalPercent = hasSale && totalInvestment > 0 ? finiteOrNull((profitTotal / totalInvestment) * 100) : null;
 
   return {
     purchasePrice: P,
+    parkingSalePrice: c.parkingSalePrice,
+    parkingNet: c.parkingNet,
+    salePriceTotal: c.salePriceTotal,
+    profitTotal,
+    marginTotalPercent,
     closingCosts,
     closingBreakdown: {
       broker: P * (read(c.inputs, 'brokerPercent') / 100),
@@ -217,7 +246,7 @@ function evaluateWith(c, P) {
     purchasePricePerSqm: perSqm(P, c.area),
     totalInvestmentPerSqm: perSqm(totalInvestment, c.area),
     requiredSalePrice: finiteOrNull(requiredSalePrice),
-    requiredSalePricePerSqm: requiredSalePrice === null ? null : perSqm(requiredSalePrice - c.parkingSalePrice, c.area),
+    requiredSalePricePerSqm: requiredSalePrice === null ? null : perSqm(requiredSalePrice, c.area),
   };
 }
 
@@ -234,6 +263,8 @@ function unpricedEvaluation() {
     totalInvestment: null,
     profit: null,
     marginPercent: null,
+    profitTotal: null,
+    marginTotalPercent: null,
     ampel: AMPEL.RED,
     purchasePricePerSqm: null,
     totalInvestmentPerSqm: null,
@@ -299,6 +330,9 @@ export function compute(kind, inputs, options = {}) {
     capLimit: c.capLimit,
     salePrice: c.salePrice,
     salePricePerSqm: c.salePricePerSqm,
+    parkingSalePrice: c.parkingSalePrice,
+    parkingNet: c.parkingNet,
+    salePriceTotal: c.salePriceTotal,
     limit: c.limit,
     buffer: c.buffer,
     capMissing: c.capMissing,
@@ -311,6 +345,7 @@ export function compute(kind, inputs, options = {}) {
     otherCosts: c.otherCosts,
     holdingCosts: c.holdingCosts,
     rentalIncome: c.rentalIncome,
+    parkingRentAnnual: c.parkingRentMonthly * 12,
     salesCommission: c.salesCommission,
     saleNet: c.saleNet,
     effectiveMargin: c.effectiveMargin,

@@ -20,6 +20,8 @@ const DASH = '–';
 const MINUS = '−';
 /** Felder, die nur bei aufgeweichter Marge sichtbar sind. */
 const SOFTENED_ONLY = Object.freeze(['marginFloor', 'minProfit']);
+/** Felder für Stellplatz-Miete, nur sichtbar bei separat vermietetem Stellplatz (Schalter parkingRentSeparate). */
+const PARKING_RENT_ONLY = Object.freeze(['parkingRent', 'parkingCount']);
 const AMPEL_LABEL = Object.freeze({ [AMPEL.GREEN]: 'Grün', [AMPEL.YELLOW]: 'Gelb', [AMPEL.RED]: 'Rot' });
 const LIMIT_TEXT = Object.freeze({
   [LIMIT.CAP]: 'm²-Deckel greift',
@@ -105,8 +107,17 @@ export function presentResult(session) {
     bufferText = `Puffer ${Fmt.euro(r.buffer)} bis zum m²-Deckel`;
   }
 
+  // Zusatzzeile mit Stellplatz: Verkaufspreis, Gewinn und Marge inkl. Stellplatz-Verkaufspreis. Leer ohne Stellplatz-Verkaufspreis.
+  // Ohne möglichen Ankauf im Modus Maximum keine Zeile, da dort auch Gewinn und Marge fehlen.
+  const totalBasis = useOffer ? offer : (maxOk ? r : null);
+  const parkingValues = r.parkingSalePrice > 0 && r.salePriceTotal !== null && totalBasis !== null
+    ? `Verkaufspreis ${Fmt.euro(r.salePriceTotal)} · Gewinn ${Fmt.euro(totalBasis.profitTotal)} · Marge ${Fmt.percent(totalBasis.marginTotalPercent)}`
+    : '';
+
   return {
     mode: s.mode,
+    parkingValues,
+    parkingLine: parkingValues === '' ? '' : `Mit Stellplatz: ${parkingValues}`,
     maxPrice: maxOk ? Fmt.euro(r.maxPurchasePrice) : DASH,
     // compute liefert ohne Einkaufspreis 0 statt null (perSqm(null, Fläche)); hier abgefangen.
     maxPricePerSqm: maxOk ? Fmt.perSqm(r.maxPurchasePricePerSqm) : DASH,
@@ -182,9 +193,10 @@ export function fieldHint(session, key) {
     case 'rent':
       return r.currentRentPerSqm === null ? '' : Fmt.perSqm(r.currentRentPerSqm);
     case 'minYield':
+      // Grenze der Wohnung allein (ohne Stellplatz/Garage).
       return r.yieldLimit === null ? '' : `Rendite-Grenze ${Fmt.euro(r.yieldLimit)}`;
     case 'maxSalePricePerSqm':
-      if (r.capLimit !== null) return `m²-Deckel ${Fmt.euro(r.capLimit - inputs.parkingSalePrice)}`;
+      if (r.capLimit !== null) return `m²-Deckel ${Fmt.euro(r.capLimit)}`;
       return inputs.maxSalePricePerSqm === 0 ? '0 = kein Deckel' : '';
     case 'renovationCosts': {
       const perSqm = inputs.livingArea > 0 ? inputs.renovationCosts / inputs.livingArea : null;
@@ -195,6 +207,14 @@ export function fieldHint(session, key) {
     }
     case 'notaryPercent':
       return `Summe ${Fmt.percent(r.knkSumPercent)} · gerechnet mit ${Fmt.fieldNumber(r.knkPercent, 0)}${NBSP}%`;
+    case 'parkingSalePrice': {
+      if (inputs.parkingSalePrice <= 0 || r.salePrice === null) return '';
+      const text = `Zusätzlicher Gewinn ${Fmt.euro(r.parkingNet)} · ändert den Einkaufspreis nicht`;
+      if (inputs.parkingRentSeparate === true && r.parkingRentAnnual > 0) {
+        return `${text} · Rendite Stellplatz ${Fmt.percent(r.parkingRentAnnual / inputs.parkingSalePrice * 100)}`;
+      }
+      return text;
+    }
     case 'durationMonths': {
       const financing = useOffer ? r.offer.financingCosts : r.financingCosts;
       // Negative laufende Kosten (Mieteinnahmen übersteigen Hausgeld): als Mietüberschuss ohne Vorzeichen.
@@ -234,8 +254,10 @@ export function visibleFields(session) {
   const s = normalizeSession(session);
   const kind = s.calc.kind;
   const softened = s.calc.inputs.softened === true;
+  const separat = s.calc.inputs.parkingRentSeparate === true;
   return FIELD_LIST.filter((f) => f.kinds.includes(kind)
     && !(SOFTENED_ONLY.includes(f.key) && !softened)
+    && !(PARKING_RENT_ONLY.includes(f.key) && !separat)
     && !(f.key === 'offerPrice' && s.mode !== 'check'));
 }
 
@@ -307,6 +329,7 @@ export function presentReport(session, now = new Date()) {
   }
   const limit = limitRow(r);
   if (limit) result.push(limit);
+  if (r.parkingValues !== '') result.push(['Mit Stellplatz', r.parkingValues]);
 
   const sections = [{ title: 'Ergebnis', rows: result }];
 
@@ -368,8 +391,13 @@ export function presentDefaults(overrides, kind) {
   const entries = overrides[kind];
   if (entries === null || typeof entries !== 'object') return [];
   const show = (field, value) => (field.unit === 'bool' ? (value === true ? 'Ja' : 'Nein') : fieldDisplay(field, value));
+  // Stellplatz-Miete nur, wenn der Stellplatz separat vermietet ist (eigener Wert oder Werksstandard).
+  const separat = Object.hasOwn(entries, 'parkingRentSeparate')
+    ? entries.parkingRentSeparate === true
+    : factoryDefaultFor('parkingRentSeparate', kind) === true;
   return FIELD_LIST
     .filter((f) => f.key !== 'offerPrice' && f.kinds.includes(kind) && Object.hasOwn(entries, f.key))
+    .filter((f) => !(PARKING_RENT_ONLY.includes(f.key) && !separat))
     .map((f) => ({
       key: f.key,
       label: f.label,

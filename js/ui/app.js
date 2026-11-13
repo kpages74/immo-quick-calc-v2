@@ -85,7 +85,9 @@ function displayOf(key, value) {
 }
 
 /** Schlüssel, bei dessen Änderung sich die Menge der sichtbaren Felder ändert: nur dann wird das Formular neu aufgebaut. */
-const formKeyOf = (s) => `${s.calc.kind}|${s.mode}|${s.calc.inputs.softened === true}`;
+// Erlaubt einen Zeilenumbruch nach dem Schrägstrich (unsichtbares Trennzeichen), damit schmale Bildschirme nicht mitten im Wort trennen.
+const breakable = (text) => String(text).replace(/\//g, "/\u200b");
+const formKeyOf = (s) => `${s.calc.kind}|${s.mode}|${s.calc.inputs.softened === true}|${s.calc.inputs.parkingRentSeparate === true}`;
 
 // MARK: - Zahlenfeld, Schalter, Textfeld
 
@@ -129,7 +131,7 @@ function numberRow(key) {
   const head = el('div', 'row-head');
   const labelWrap = el('div', 'label-wrap');
   const labelLine = el('div', 'label-line');
-  labelLine.append(el('span', 'label', spec.label));
+  labelLine.append(el('span', 'label', breakable(spec.label)));
   let helpBox = null;
   if (spec.help) {
     const pair = helpPair(`field:${key}`, `Erklärung: ${spec.label}`, spec.help);
@@ -230,7 +232,15 @@ function switchRow(key) {
   const root = el('div', 'row row-switch');
   const head = el('div', 'row-head');
   const labelWrap = el('div', 'label-wrap');
-  labelWrap.append(el('span', 'label', spec.label));
+  const labelLine = el('div', 'label-line');
+  labelLine.append(el('span', 'label', breakable(spec.label)));
+  let helpBox = null;
+  if (spec.help) {
+    const pair = helpPair(`field:${key}`, `Erklärung: ${spec.label}`, spec.help);
+    labelLine.append(pair.button);
+    helpBox = pair.box;
+  }
+  labelWrap.append(labelLine);
 
   const btn = el('button', 'switch');
   btn.type = 'button';
@@ -244,6 +254,7 @@ function switchRow(key) {
 
   head.append(labelWrap, btn);
   root.append(head);
+  if (helpBox) root.append(helpBox);
 
   const update = (s) => {
     const on = s.calc.inputs[key] === true;
@@ -422,6 +433,11 @@ function limitLine(r) {
   return text ? el('p', 'limit', text) : null;
 }
 
+/** Zeile „Mit Stellplatz: …“ nur bei Stellplatz-Verkaufspreis. */
+function parkingLineNode(r) {
+  return r.parkingLine ? el('p', 'limit', r.parkingLine) : null;
+}
+
 /** Hinweise stehen außerhalb der Karte, in #result-notes. */
 function renderNotes(r) {
   const box = $('result-notes');
@@ -459,7 +475,7 @@ function maxView(r, kind) {
     cell('GIK', r.gik),
   );
   if (kind !== 'en') cells.append(cell('Rendite Käufer', r.buyerYield));
-  return [hero, verdict(r), cells, limitLine(r)].filter(Boolean);
+  return [hero, verdict(r), cells, limitLine(r), parkingLineNode(r)].filter(Boolean);
 }
 
 /** Ansicht „Angebot prüfen“ mit Angebotspreis: Marge und Gewinn beim Angebot. */
@@ -475,7 +491,7 @@ function offerView(r) {
     cell('Verkaufspreis', r.salePrice, r.salePricePerSqm),
     cell('Nötiger Verkaufspreis für 20 %', r.offer.requiredSalePrice, r.offer.requiredSalePricePerSqm),
   );
-  return [hero, verdict(r), el('p', 'delta', r.offer.deltaText), cells, limitLine(r)].filter(Boolean);
+  return [hero, verdict(r), el('p', 'delta', r.offer.deltaText), cells, limitLine(r), parkingLineNode(r)].filter(Boolean);
 }
 
 function renderResult() {
