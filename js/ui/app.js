@@ -470,9 +470,9 @@ function maxView(r, kind) {
 
   const cells = el('div', 'cells');
   cells.append(
-    cell('Marge', r.margin, r.profit),
+    cell('Marge', r.margin, `${r.profit} · ${r.profitPerSqm}`),
     cell('Verkaufspreis', r.salePrice, r.salePricePerSqm),
-    cell('GIK', r.gik),
+    cell('GIK', r.gik, r.gikPerSqm),
   );
   if (kind !== 'en') cells.append(cell('Rendite Käufer', r.buyerYield));
   return [hero, verdict(r), cells, limitLine(r), parkingLineNode(r)].filter(Boolean);
@@ -482,12 +482,12 @@ function maxView(r, kind) {
 function offerView(r) {
   const hero = el('div', 'hero');
   hero.append(el('span', 'cap', 'Marge beim Angebot'), el('span', 'hero-fig fit', r.margin));
-  hero.append(el('span', 'sub', `Gewinn ${r.profit}`));
+  hero.append(el('span', 'sub', `Gewinn ${r.profit} · ${r.profitPerSqm}`));
 
   const cells = el('div', 'cells');
   cells.append(
     cell('Max. Einkaufspreis', r.maxPrice, r.maxPricePerSqm),
-    cell('GIK', r.gik),
+    cell('GIK', r.gik, r.gikPerSqm),
     cell('Verkaufspreis', r.salePrice, r.salePricePerSqm),
     cell('Nötiger Verkaufspreis für 20 %', r.offer.requiredSalePrice, r.offer.requiredSalePricePerSqm),
   );

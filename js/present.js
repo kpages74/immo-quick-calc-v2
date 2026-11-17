@@ -79,6 +79,12 @@ export function presentResult(session) {
   const ampel = basis.ampel;
   const margin = basis.marginPercent;
 
+  // Gegenwert je m² zu GIK und Gewinn. Ohne Wohnfläche oder ohne Zahl (z. B. kein Ankauf): DASH.
+  const flaeche = inputs.livingArea;
+  const perSqmOf = (value) => (flaeche > 0 && typeof value === 'number' && Number.isFinite(value)
+    ? Fmt.perSqm(value / flaeche)
+    : DASH);
+
   // notes: Hinweistexte. noteHelp: je Hinweis der Erklärtext (gleiche Länge). Nur die Deckel-Hinweise haben einen.
   const notes = [];
   const noteHelp = [];
@@ -127,9 +133,11 @@ export function presentResult(session) {
     ampelText: ampelText(ampel, margin),
     margin: Fmt.percent(margin),
     profit: Fmt.euro(basis.profit),
+    profitPerSqm: perSqmOf(basis.profit),
     salePrice: Fmt.euro(r.salePrice),
     salePricePerSqm: Fmt.perSqm(r.salePricePerSqm),
     gik: Fmt.euro(basis.totalInvestment),
+    gikPerSqm: perSqmOf(basis.totalInvestment),
     buyerYield: Fmt.percent(r.buyerYield),
     limitText: Object.hasOwn(LIMIT_TEXT, r.limit) ? LIMIT_TEXT[r.limit] : '',
     bufferText,
@@ -192,6 +200,15 @@ export function fieldHint(session, key) {
         : `Soll-Miete ${Fmt.euro(r.targetRent)} · ${Fmt.perSqm(r.targetRentPerSqm)}`;
     case 'rent':
       return r.currentRentPerSqm === null ? '' : Fmt.perSqm(r.currentRentPerSqm);
+    case 'rentPerSqm':
+      // Gesamtmiete der Wohnung im Monat (Miete je m² × Wohnfläche).
+      return inputs.livingArea > 0 && inputs.rentPerSqm > 0
+        ? `Miete ${Fmt.euro(inputs.livingArea * inputs.rentPerSqm)} p. M.`
+        : '';
+    case 'otherCosts':
+      return inputs.otherCosts > 0 && inputs.livingArea > 0
+        ? Fmt.perSqm(inputs.otherCosts / inputs.livingArea)
+        : '';
     case 'minYield':
       // Grenze der Wohnung allein (ohne Stellplatz/Garage).
       return r.yieldLimit === null ? '' : `Rendite-Grenze ${Fmt.euro(r.yieldLimit)}`;
@@ -223,6 +240,10 @@ export function fieldHint(session, key) {
         : `Laufende Kosten ${Fmt.euro(r.holdingCosts)}`;
       return `${holding} · Finanzierung ${Fmt.euro(financing)}`;
     }
+    case 'offerPrice':
+      return typeof inputs.offerPrice === 'number' && inputs.offerPrice > 0 && inputs.livingArea > 0
+        ? Fmt.perSqm(inputs.offerPrice / inputs.livingArea)
+        : '';
     default:
       return '';
   }
@@ -302,7 +323,7 @@ export function presentReport(session, now = new Date()) {
   const validNow = now instanceof Date && !Number.isNaN(now.getTime());
 
   const headline = withOffer
-    ? { label: 'Marge beim Angebot', value: r.margin, sub: `Gewinn ${r.profit}` }
+    ? { label: 'Marge beim Angebot', value: r.margin, sub: `Gewinn ${r.profit} · ${r.profitPerSqm}` }
     : {
       label: 'Max. Einkaufspreis',
       value: r.maxPrice,
@@ -315,15 +336,15 @@ export function presentReport(session, now = new Date()) {
       ['Angebotspreis', r.offer.price],
       ['Abstand zum Maximum', r.offer.deltaText],
       ['Max. Einkaufspreis', `${r.maxPrice} · ${r.maxPricePerSqm}`],
-      ['GIK', r.gik],
+      ['GIK', `${r.gik} · ${r.gikPerSqm}`],
       ['Verkaufspreis', `${r.salePrice} · ${r.salePricePerSqm}`],
       ['Nötiger Verkaufspreis für 20 %', `${r.offer.requiredSalePrice} · ${r.offer.requiredSalePricePerSqm}`],
     );
   } else {
     result.push(
-      ['Marge', `${r.margin} · ${r.profit}`],
+      ['Marge', `${r.margin} · ${r.profit} · ${r.profitPerSqm}`],
       ['Verkaufspreis', `${r.salePrice} · ${r.salePricePerSqm}`],
-      ['GIK', r.gik],
+      ['GIK', `${r.gik} · ${r.gikPerSqm}`],
     );
     if (kind !== KIND.EN) result.push(['Rendite Käufer', r.buyerYield]);
   }
