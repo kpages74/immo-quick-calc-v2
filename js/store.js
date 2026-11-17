@@ -4,11 +4,14 @@ import { newSession, normalizeSession } from './session.js';
 import { cleanDefaults } from './defaults.js';
 import { cleanLibrary } from './library.js';
 import { cleanPriceList } from './pricelist.js';
+import { cleanQuickieState, cleanVorgaben } from './quickie.js';
 
 export const STORAGE_KEY = 'iqc2_current';
 export const DEFAULTS_KEY = 'iqc2_defaults';
 export const OBJECTS_KEY = 'iqc2_objects';
 export const PRICELIST_KEY = 'iqc2_pricelist';
+export const QUICKIE_KEY = 'iqc2_quickie';
+export const QUICKIE_VORGABEN_KEY = 'iqc2_quickie_vorgaben';
 
 /** Standard-Speicher: globalThis.localStorage, falls vorhanden. Schon der Zugriff kann werfen. */
 function defaultStorage() {
@@ -142,6 +145,56 @@ export function clearPriceList(storage) {
     const s = resolveStorage(storage);
     if (!s) return false;
     s.removeItem(PRICELIST_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Quickie-Zustand (Schalter, Eingaben). Fehler oder fehlender Eintrag: Startwerte. */
+export function loadQuickie(storage) {
+  try {
+    const s = resolveStorage(storage);
+    if (!s) return cleanQuickieState(null);
+    const raw = s.getItem(QUICKIE_KEY);
+    if (typeof raw !== 'string') return cleanQuickieState(null);
+    return cleanQuickieState(JSON.parse(raw));
+  } catch {
+    return cleanQuickieState(null);
+  }
+}
+
+/** Speichert den Quickie-Zustand (gesäubert). true bei Erfolg, sonst false. */
+export function saveQuickie(storage, state) {
+  try {
+    const s = resolveStorage(storage);
+    if (!s) return false;
+    s.setItem(QUICKIE_KEY, JSON.stringify(cleanQuickieState(state)));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Quickie-Vorgaben, gesäubert. Fehler oder fehlender Eintrag: Standardwerte. */
+export function loadQuickieVorgaben(storage) {
+  try {
+    const s = resolveStorage(storage);
+    if (!s) return cleanVorgaben(null);
+    const raw = s.getItem(QUICKIE_VORGABEN_KEY);
+    if (typeof raw !== 'string') return cleanVorgaben(null);
+    return cleanVorgaben(JSON.parse(raw));
+  } catch {
+    return cleanVorgaben(null);
+  }
+}
+
+/** Speichert die Quickie-Vorgaben (gesäubert). true bei Erfolg, sonst false. */
+export function saveQuickieVorgaben(storage, vorgaben) {
+  try {
+    const s = resolveStorage(storage);
+    if (!s) return false;
+    s.setItem(QUICKIE_VORGABEN_KEY, JSON.stringify(cleanVorgaben(vorgaben)));
     return true;
   } catch {
     return false;

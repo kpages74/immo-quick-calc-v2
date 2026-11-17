@@ -28,6 +28,7 @@
 
         <div class="controls">
           <div class="seg seg-main" id="seg-kind" role="group" aria-label="Nutzungsart">
+            <button type="button" class="seg-btn" data-kind="quickie" aria-pressed="false">Quickie</button>
             <button type="button" class="seg-btn" data-kind="vermietet" aria-pressed="false">Vermietet</button>
             <button type="button" class="seg-btn" data-kind="leer" aria-pressed="false">Leerstehend</button>
             <button type="button" class="seg-btn" data-kind="wg" aria-pressed="false">WG</button>
@@ -48,6 +49,9 @@
           </div>
           <p class="save-state" id="save-state" aria-live="polite"></p>
         </div>
+
+        <!-- Quickie: Deal-Schnellcheck, ersetzt den Rechner solange gewählt (js/ui/quickie.js) -->
+        <div id="quickie" class="q-wrap" hidden></div>
 
         <div class="split">
           <aside class="side">
@@ -74,7 +78,7 @@
       <section id="view-einstellungen" class="view" aria-label="Einstellungen" hidden>
         <h1 class="page-title">Einstellungen</h1>
         <div id="settings-body"></div>
-        <p class="version">Immo Quick-Calc 2.0 · Cache iqc2-v4</p>
+        <p class="version">Immo Quick-Calc 2.0 · Cache iqc2-v6</p>
       </section>
 
     </main>

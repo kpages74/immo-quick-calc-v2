@@ -19,6 +19,7 @@ import { initObjects, renderObjects } from './objects.js';
 import { initSettings, renderSettings } from './settings.js';
 import { initActions, updateActions, checkIncomingLink } from './actions.js';
 import { createPriceBox } from './pricebox.js';
+import { initQuickie, isQuickieActive, setQuickieActive, renderQuickie } from './quickie.js';
 
 const AMPEL_TEXT = Object.freeze({ gruen: 'Grün', gelb: 'Gelb', rot: 'Rot' });
 const VIEWS = Object.freeze(['rechner', 'objekte', 'einstellungen']);
@@ -76,6 +77,8 @@ const ctx = {
     pricelist = cleanPriceList(null);
     return removePriceList(undefined);
   },
+  /** Quickie beenden (ohne Neuzeichnen): z. B. vor dem Öffnen eines Objekts über einen Link. */
+  leaveQuickie: () => setQuickieActive(false),
 };
 
 /** Anzeige eines Zahlenfeldes ohne Fokus. Ohne Wert (Angebotspreis) leer. */
@@ -509,10 +512,13 @@ function renderResult() {
 function renderSegments() {
   const kind = session.calc.kind;
   const group = kind === 'vermietet' ? 'vermietet' : kind === 'wg' ? 'wg' : 'leer';
+  const quick = isQuickieActive();
   for (const btn of $('seg-kind').querySelectorAll('button')) {
-    btn.setAttribute('aria-pressed', String(btn.dataset.kind === group));
+    // Im Quickie ist nur der Knopf „Quickie“ gedrückt.
+    const pressed = quick ? btn.dataset.kind === 'quickie' : btn.dataset.kind === group;
+    btn.setAttribute('aria-pressed', String(pressed));
   }
-  $('seg-sub').hidden = group !== 'leer';
+  $('seg-sub').hidden = quick || group !== 'leer';
   for (const btn of $('seg-sub').querySelectorAll('button')) {
     btn.setAttribute('aria-pressed', String(btn.dataset.kind === kind));
   }
@@ -524,10 +530,21 @@ function renderSegments() {
 function bindSegments() {
   for (const btn of $('seg-kind').querySelectorAll('button')) {
     btn.addEventListener('click', () => {
+      // Quickie ist nur ein Oberflächenzustand: keine Art, keine Sitzungsänderung.
+      if (btn.dataset.kind === 'quickie') {
+        if (!isQuickieActive()) {
+          setQuickieActive(true);
+          render();
+        }
+        return;
+      }
+      const wasQuickie = isQuickieActive();
+      setQuickieActive(false);
       const current = session.calc.kind;
       // „Leerstehend“ wählt Kapitalanleger; die Unterart wird danach über den zweiten Umschalter gesetzt.
       const target = btn.dataset.kind === 'leer' ? 'kap' : btn.dataset.kind;
       if (target !== current) commit(switchKind(session, target));
+      else if (wasQuickie) render();
     });
   }
   for (const btn of $('seg-sub').querySelectorAll('button')) {
@@ -548,16 +565,32 @@ function fitAll() {
   for (const node of document.querySelectorAll('.fit')) fitText(node);
 }
 
+/** Im Quickie ausblenden: Unterart, Modus, Aktionen, Speicherzustand und der Rechner selbst. */
+function setQuickieLayout(quick) {
+  if (quick) $('seg-sub').hidden = true;
+  $('seg-mode').hidden = quick;
+  $('actions').hidden = quick;
+  $('save-state').hidden = quick;
+  document.querySelector('#view-rechner .split').hidden = quick;
+  $('quickie').hidden = !quick;
+}
+
 function render() {
+  const quick = isQuickieActive();
   const key = formKeyOf(session);
   if (key !== formKey) {
     formKey = key;
     buildForm();
   }
   renderSegments();
-  renderResult();
-  for (const widget of widgets) widget.update(session);
-  renderScenarios();
+  setQuickieLayout(quick);
+  if (quick) {
+    renderQuickie();
+  } else {
+    renderResult();
+    for (const widget of widgets) widget.update(session);
+    renderScenarios();
+  }
   updateActions();
   fitAll();
 }
@@ -579,6 +612,7 @@ function showView(name) {
 
 function init() {
   bindSegments();
+  initQuickie();
   initDialogs();
   initObjects(ctx);
   initSettings(ctx);

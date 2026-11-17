@@ -130,6 +130,7 @@ export async function checkIncomingLink() {
   });
   history.replaceState(null, '', location.pathname + location.search);
   if (ok) {
+    ctx.leaveQuickie();
     ctx.replaceSession({ calc: shared.calc, carry: {}, mode: shared.mode });
     ctx.showView('rechner');
   }
