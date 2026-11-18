@@ -146,20 +146,24 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .seg {
   display: flex;
   gap: 4px;
-  min-height: 50px;
-  padding: 3px;
-  margin-top: 10px;
+  min-height: 38px;
+  padding: 2px;
+  margin-top: 8px;
   border-radius: 999px;
   border: 1.5px solid var(--accent);
   background: var(--seg-bg);
 }
 
-.seg-sub { min-height: 46px; }
+.seg-sub { min-height: 34px; }
+.seg-sub .seg-btn { min-height: 28px; font-size: 14px; }
+.seg-mode { min-height: 34px; }
+.seg-mode .seg-btn { min-height: 28px; font-size: 14px; }
 
 .seg-btn {
+  position: relative;
   flex: 1 1 0;
   min-width: 0;
-  min-height: 44px;
+  min-height: 32px;
   padding: 0 6px;
   border-radius: 999px;
   font-size: 16px;
@@ -168,6 +172,9 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
   line-height: 1.15;
   text-align: center;
 }
+
+/* Größere Tippfläche, ohne die Optik zu ändern */
+.seg-btn::after { content: ""; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
 
 .seg-btn[aria-pressed="true"] {
   background: var(--accent);
@@ -180,7 +187,6 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 
 @media (max-width: 360px) {
   .seg-main .seg-btn { font-size: 14px; padding: 0 3px; }
-  .seg-mode .seg-btn { font-size: 14px; }
 }
 
 /* Ergebnis: auf dem Handy steht nur die Karte oben, die Hinweise scrollen darunter mit.
