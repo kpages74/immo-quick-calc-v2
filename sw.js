@@ -1,6 +1,6 @@
 // Service Worker der Immo Quick-Calc 2.0: Offline-Nutzung. Bei jeder Änderung der Dateien CACHE_NAME erhöhen,
 // damit alte Caches entfernt und die neuen Dateien geladen werden.
-const CACHE_NAME = 'iqc2-v6';
+const CACHE_NAME = 'iqc2-v8';
 
 const ASSETS = [
   './',
@@ -36,9 +36,25 @@ const ASSETS = [
   './js/ui/actions.js',
   './js/ui/pricebox.js',
   './js/ui/quickie.js',
+  './js/ui/exposebox.js',
   './js/ui/pdfreader.js',
+  './js/ui/ocr.js',
   './js/vendor/pdf.min.js',
   './js/vendor/pdf.worker.min.js',
+];
+
+// Texterkennung (ca. 9 MB): nicht beim Installieren laden, sondern erst beim ersten Bild.
+// Der Fetch-Handler legt sie dann im Cache ab, danach geht sie auch offline.
+const LAZY_ASSETS = [
+  './js/vendor/tesseract/tesseract.min.js',
+  './js/vendor/tesseract/tesseract.min.js.LICENSE.txt',
+  './js/vendor/tesseract/worker.min.js',
+  './js/vendor/tesseract/worker.min.js.LICENSE.txt',
+  './js/vendor/tesseract/tesseract-core-lstm.wasm.js',
+  './js/vendor/tesseract/tesseract-core-simd-lstm.wasm.js',
+  './js/vendor/tesseract/deu.traineddata.gz',
+  './js/vendor/tesseract/LICENSE-tesseract.js.md',
+  './js/vendor/tesseract/LICENSE-tesseract.js-core.txt',
 ];
 
 self.addEventListener('install', (event) => {

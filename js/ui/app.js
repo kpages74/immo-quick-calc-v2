@@ -20,6 +20,7 @@ import { initSettings, renderSettings } from './settings.js';
 import { initActions, updateActions, checkIncomingLink } from './actions.js';
 import { createPriceBox } from './pricebox.js';
 import { initQuickie, isQuickieActive, setQuickieActive, renderQuickie } from './quickie.js';
+import { createExposeBox } from './exposebox.js';
 
 const AMPEL_TEXT = Object.freeze({ gruen: 'Grün', gelb: 'Gelb', rot: 'Rot' });
 const VIEWS = Object.freeze(['rechner', 'objekte', 'einstellungen']);
@@ -38,6 +39,10 @@ let scenarioBox = null;
 const groupOpen = {};
 // Offene Erklärungen überleben das Neuzeichnen. Schlüssel: field:<Feld> oder note:<Nummer>.
 const openHelp = new Set();
+// Markierungen aus „Exposé einlesen“ im Rechner: Feldschlüssel → 'filled' (übernommen) | 'missing' (fehlt).
+// Sie gelten, bis das Feld selbst geändert oder die Art gewechselt wird (marksKind = Art der Markierung).
+const marks = new Map();
+let marksKind = null;
 
 // MARK: - Zustand
 
@@ -55,6 +60,33 @@ function replaceSession(next) {
   saveSession(undefined, session);
   render();
 }
+
+/**
+ * Ergebnis des Exposé-Blocks im Rechner (js/ui/exposebox.js, Werte je Seite aus js/expose.js): Werte über die Sitzung
+ * übernehmen, gefundene Felder grün, fehlende gelb markieren. Ein Kaufpreis schaltet auf „Angebot prüfen“.
+ */
+function uebernehmenExpose(res) {
+  marks.clear();
+  marksKind = session.calc.kind;
+  if (!res.werte) {
+    render();
+    return;
+  }
+  let next = session;
+  for (const [key, value] of Object.entries(res.werte)) {
+    if (value === null) {
+      marks.set(key, 'missing');
+    } else {
+      marks.set(key, 'filled');
+      next = setInput(next, key, value);
+    }
+  }
+  if (res.werte.offerPrice !== null) next = setMode(next, 'check');
+  commit(next);
+}
+
+/** Exposé-Block im Rechner: steht in der Eingabespalte über dem Formular, bleibt beim Neuaufbau erhalten. */
+const exposeRechner = createExposeBox({ getArt: () => session.calc.kind, onErgebnis: uebernehmenExpose });
 
 /** Zugriff für die Module der Oberfläche. Speichern der Listen geschieht über js/store.js. */
 const ctx = {
@@ -167,6 +199,12 @@ function numberRow(key) {
   // Bearbeitungstext beim Fokus. null = nicht im Bearbeitungsmodus.
   let editStart = null;
 
+  // Eigene Eingabe in dieses Feld hebt die Markierung aus dem Exposé auf.
+  const unmark = () => {
+    marks.delete(key);
+    pill.classList.remove('filled', 'missing');
+  };
+
   pill.addEventListener('focus', () => {
     const value = session.calc.inputs[key];
     editStart = value === null || value === undefined ? '' : Fmt.editingNumber(value);
@@ -195,6 +233,8 @@ function numberRow(key) {
     fitPill(pill);
   });
 
+  pill.addEventListener('input', unmark);
+
   pill.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
@@ -203,6 +243,7 @@ function numberRow(key) {
   });
 
   slider.addEventListener('input', () => {
+    unmark();
     commit(setInput(session, key, Number(slider.value)));
   });
 
@@ -225,6 +266,9 @@ function numberRow(key) {
     }
     slider.value = String(value ?? 0);
     setHint(hint, fieldHint(s, key));
+    const mark = marks.get(key);
+    pill.classList.toggle('filled', mark === 'filled');
+    pill.classList.toggle('missing', mark === 'missing');
   };
 
   return { node: root, update };
@@ -433,7 +477,44 @@ function cell(caption, value, sub) {
 
 function limitLine(r) {
   const text = [r.limitText, r.bufferText].filter(Boolean).join(' · ');
-  return text ? el('p', 'limit', text) : null;
+  if (!text) return null;
+  const line = el('p', 'limit', text);
+  if (!r.limitHelp) return line;
+  // Nur das „?“ hinter der Zeile; die Erklärung erscheint beim Antippen als Pop-up über der Seite.
+  const button = el('button', 'help-btn');
+  button.type = 'button';
+  button.setAttribute('aria-label', 'Erklärung: Rendite-Grenze und m²-Deckel');
+  button.setAttribute('aria-haspopup', 'dialog');
+  button.addEventListener('click', () => showHelpPopup('Rendite-Grenze und m²-Deckel', r.limitHelp));
+  line.append(' ', button);
+  return line;
+}
+
+/** Pop-up mit Erklärtext. Schließt über den Knopf, Escape oder Tippen neben das Fenster. */
+function showHelpPopup(title, text) {
+  let dlg = document.getElementById('dlg-help');
+  if (!dlg) {
+    dlg = el('dialog', 'help-dialog');
+    dlg.id = 'dlg-help';
+    dlg.setAttribute('aria-labelledby', 'help-title');
+    const head = el('h2', 'dlg-title');
+    head.id = 'help-title';
+    const body = el('p', 'help-dialog-text');
+    const actions = el('div', 'dlg-actions');
+    const close = el('button', 'btn', 'Schließen');
+    close.type = 'button';
+    close.addEventListener('click', () => dlg.close());
+    actions.append(close);
+    dlg.append(head, body, actions);
+    dlg.addEventListener('click', (event) => {
+      if (event.target === dlg) dlg.close(); // Tippen auf den Hintergrund
+    });
+    document.body.append(dlg);
+  }
+  dlg.querySelector('#help-title').textContent = title;
+  dlg.querySelector('.help-dialog-text').textContent = text;
+  if (typeof dlg.showModal === 'function') dlg.showModal();
+  else dlg.setAttribute('open', '');
 }
 
 /** Zeile „Mit Stellplatz: …“ nur bei Stellplatz-Verkaufspreis. */
@@ -577,6 +658,12 @@ function setQuickieLayout(quick) {
 
 function render() {
   const quick = isQuickieActive();
+  // Wechsel der Art: Markierungen und Meldung des Exposé-Blocks gelten nicht mehr.
+  if (marksKind !== null && session.calc.kind !== marksKind) {
+    marks.clear();
+    marksKind = null;
+    exposeRechner.leeren();
+  }
   const key = formKeyOf(session);
   if (key !== formKey) {
     formKey = key;
@@ -613,6 +700,7 @@ function showView(name) {
 function init() {
   bindSegments();
   initQuickie();
+  $('expose-rechner').append(exposeRechner.node);
   initDialogs();
   initObjects(ctx);
   initSettings(ctx);

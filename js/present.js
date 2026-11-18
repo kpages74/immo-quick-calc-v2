@@ -93,10 +93,9 @@ export function presentResult(session) {
     noteHelp.push(help);
   };
   const deckelHelp = FIELDS.maxSalePricePerSqm.help ?? '';
-  if (r.capMissing) {
-    add(s.calc.kind === KIND.EN
-      ? 'Bitte den max. Verkaufspreis je m² eingeben.'
-      : 'Kein m²-Deckel gesetzt. Es gilt nur die Rendite-Grenze.', deckelHelp);
+  // Ohne Deckel (Vermietet, KAP, WG) kein eigener Hinweis mehr: Die Erklärung steht als „?“ hinter „Rendite-Grenze greift“.
+  if (r.capMissing && s.calc.kind === KIND.EN) {
+    add('Bitte den max. Verkaufspreis je m² eingeben.', deckelHelp);
   }
   if (r.softenedActive) {
     add(`Aufgeweicht: ${Fmt.fieldNumber(r.effectiveMargin, 1)}${NBSP}% statt ${RULE_MARGIN}${NBSP}%`);
@@ -141,6 +140,8 @@ export function presentResult(session) {
     buyerYield: Fmt.percent(r.buyerYield),
     limitText: Object.hasOwn(LIMIT_TEXT, r.limit) ? LIMIT_TEXT[r.limit] : '',
     bufferText,
+    // Erklärung zur Grenze (Rendite-Grenze / m²-Deckel), als „?“ hinter limitText.
+    limitHelp: Object.hasOwn(LIMIT_TEXT, r.limit) && LIMIT_TEXT[r.limit] ? deckelHelp : '',
     notes,
     noteHelp,
     offer: useOffer

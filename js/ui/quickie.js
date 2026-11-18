@@ -1,19 +1,16 @@
 // Oberfläche des Quickie (Deal-Schnellcheck). Der Bereich wird einmal aufgebaut, danach werden nur Texte und Werte
 // aktualisiert, damit ein gerade bearbeitetes Feld nicht neu entsteht. Rechnen und Texte kommen aus js/quickie.js,
-// Suchen im Exposé aus js/expose.js, PDF-Lesen aus js/ui/pdfreader.js, Speicher aus js/store.js. Hier steht keine Formel
-// und keine Suchlogik.
+// Der Block „Exposé einlesen“ kommt aus js/ui/exposebox.js (gemeinsam mit dem Rechner), Speicher aus js/store.js.
+// Hier steht keine Formel und keine Suchlogik.
 import { el, setHint, fitText } from './controls.js';
 import { parseNumber, Fmt } from '../format.js';
 import { QUICKIE_DEFAULTS, cleanVorgaben, presentQuickie } from '../quickie.js';
 import { loadQuickie, saveQuickie, loadQuickieVorgaben, saveQuickieVorgaben } from '../store.js';
-import { analysiereText, analysierePdfText } from '../expose.js';
-import { leseTextAusPdf } from './pdfreader.js';
+import { createExposeBox } from './exposebox.js';
 
 let state = null;      // { active, miete, flaeche, angebot }
 let vorgaben = null;   // { erh, r, deckel, nk, halte, marge, z1, z2 }
 let refs = null;       // Verweise auf die Knoten, die aktualisiert werden
-
-const PDF_FEHLER = 'PDF konnte nicht geöffnet werden. Bitte Werte von Hand eintragen oder den Exposé-Text einfügen.';
 
 /** Anzeige eines Zahlenwertes ohne Fokus: ganze Zahlen mit Tausenderpunkt, sonst bis 2 Nachkommastellen. */
 function displayNum(value) {
@@ -126,36 +123,6 @@ function buildFact(label) {
   return { row, value };
 }
 
-/** Bereich „Exposé einlesen“: PDF per Ablage oder Auswahl, Text per Einfügen, Ergebnisliste. */
-function buildImport() {
-  const drop = el('label', 'q-drop');
-  const file = el('input', 'q-file');
-  file.type = 'file';
-  file.accept = 'application/pdf';
-  file.setAttribute('aria-label', 'PDF-Exposé wählen');
-  drop.append(file, el('span', null, 'PDF hier ablegen oder auswählen'));
-
-  const text = el('textarea', 'q-text');
-  text.placeholder = '… oder Exposé-Text hier einfügen';
-  text.setAttribute('aria-label', 'Exposé-Text');
-  text.rows = 1;
-
-  const go = el('button', 'q-go', 'Text auswerten');
-  go.type = 'button';
-
-  const textRow = el('div', 'q-import-row');
-  textRow.append(text, go);
-
-  const status = el('p', 'q-status');
-  status.setAttribute('aria-live', 'polite');
-  const list = el('ul', 'q-finds');
-
-  const title = el('h2', 'q-import-title', 'Exposé einlesen');
-  const box = el('section', 'q-box q-import');
-  box.append(title, drop, textRow, status, list);
-  return { box, drop, file, text, go, status, list };
-}
-
 function buildRefs(root) {
   const miete = buildField('miete', 'Ist-Kaltmiete', '€/Mon.');
   const flaeche = buildField('flaeche', 'Wohnfläche', 'm²');
@@ -229,8 +196,9 @@ function buildRefs(root) {
 
   const foot = el('p', 'q-foot');
 
-  const imp = buildImport();
-  root.replaceChildren(imp.box, inputsRow, buyerRow, verdict, limitRow, hint, factRow, weg, vorgabenBox, foot);
+  // Gemeinsamer Baustein „Exposé einlesen“ (js/ui/exposebox.js). Der Quickie übernimmt die Werte in uebernehmen().
+  const imp = createExposeBox({ getArt: () => 'quickie', onErgebnis: uebernehmen });
+  root.replaceChildren(imp.node, inputsRow, buyerRow, verdict, limitRow, hint, factRow, weg, vorgabenBox, foot);
 
   return {
     inputs: { miete, flaeche, angebot, rendite, deckel, vorgaben: vorgabeFields },
@@ -335,22 +303,7 @@ export function renderQuickie() {
 
 // MARK: - Exposé einlesen
 
-function setStatus(text, art) {
-  const node = refs.imp.status;
-  node.textContent = text ?? '';
-  if (art) node.dataset.art = art;
-  else delete node.dataset.art;
-}
-
-/** Nur Warnhinweise (z. B. Staffel-/Indexmiete) mit ⚠ zeigen; gefundene Werte stehen bereits grün markiert in den Feldern. Nur textContent. */
-function renderFunde(res) {
-  const list = refs.imp.list;
-  list.replaceChildren();
-  for (const note of res.notes) list.append(el('li', 'q-warn', `⚠ ${note}`));
-  list.hidden = res.notes.length === 0;
-}
-
-/** Gefundene Werte in die Felder schreiben (gerundet), fehlende Felder markieren, Speichern und Neurechnen. */
+/** Ergebnis des Exposé-Blocks: gefundene Werte in die Felder schreiben (gerundet), fehlende markieren, Speichern und Neurechnen. */
 function uebernehmen(res) {
   const inputs = refs.inputs;
   for (const f of [inputs.miete, inputs.flaeche, inputs.angebot]) f.input.classList.remove('filled', 'missing');
@@ -374,64 +327,6 @@ function uebernehmen(res) {
   renderQuickie();
 }
 
-function auswerten(res) {
-  // Erfolgsmeldung entfällt: die Felder sind grün bzw. gelb markiert. Nur Fehler werden gemeldet.
-  if (res.status.art === 'err') setStatus(res.status.text, 'err');
-  else setStatus('', null);
-  renderFunde(res);
-  uebernehmen(res);
-}
-
-/** Datei prüfen und lesen. Nur PDF wird angenommen. */
-async function leseDatei(file) {
-  if (!refs) return;
-  if (file.type !== 'application/pdf') {
-    setStatus('Dateityp nicht unterstützt. Bitte ein PDF wählen.', 'err');
-    return;
-  }
-  setStatus('PDF wird gelesen …', null);
-  refs.imp.list.replaceChildren();
-  let text;
-  try {
-    text = await leseTextAusPdf(file);
-  } catch {
-    setStatus(PDF_FEHLER, 'err');
-    return;
-  }
-  auswerten(analysierePdfText(text, 'PDF (Suchmuster)'));
-}
-
-function bindImport() {
-  const imp = refs.imp;
-  imp.file.addEventListener('change', () => {
-    const f = imp.file.files?.[0];
-    if (f) leseDatei(f);
-    imp.file.value = '';
-  });
-  imp.drop.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    imp.drop.classList.add('is-over');
-  });
-  imp.drop.addEventListener('dragleave', () => imp.drop.classList.remove('is-over'));
-  imp.drop.addEventListener('drop', (e) => {
-    e.preventDefault();
-    imp.drop.classList.remove('is-over');
-    const f = e.dataTransfer?.files?.[0];
-    if (f) leseDatei(f);
-  });
-  imp.go.addEventListener('click', () => {
-    auswerten(analysiereText(imp.text.value, 'Text (Suchmuster)'));
-  });
-  // Strg+V mit einem PDF: nur wenn der Quickie aktiv ist.
-  document.addEventListener('paste', (e) => {
-    if (!isQuickieActive() || !refs) return;
-    const pdf = [...(e.clipboardData?.files ?? [])].find((f) => f.type === 'application/pdf');
-    if (!pdf) return;
-    e.preventDefault();
-    leseDatei(pdf);
-  });
-}
-
 /** Einmal beim Start: Zustand laden, Bereich in #quickie aufbauen. */
 export function initQuickie() {
   state = loadQuickie();
@@ -439,6 +334,5 @@ export function initQuickie() {
   const root = document.getElementById('quickie');
   if (!root) return;
   refs = buildRefs(root);
-  bindImport();
   renderQuickie();
 }
