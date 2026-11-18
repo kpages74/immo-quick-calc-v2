@@ -57,6 +57,7 @@ function commit(next) {
 function replaceSession(next) {
   session = next;
   formKey = '';
+  $('import-banner').hidden = true; // Hinweis „Übernommen aus …“ gehört nur zur zuletzt übernommenen Kalkulation
   saveSession(undefined, session);
   render();
 }

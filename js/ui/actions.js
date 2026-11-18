@@ -5,8 +5,10 @@ import { presentReport } from '../present.js';
 import { buildPdf, pdfFileName } from '../pdf.js';
 import { shareUrl, decodeShare } from '../share.js';
 import { resetAll } from '../session.js';
+import { fieldsFor } from '../fields.js';
+import { buildAkte, akteFileName } from '../akte-export.js';
 import { confirmDialog, openModal, showStatus, SAVE_FAILED } from './dialogs.js';
-import { shareOrDownload } from './files.js';
+import { shareOrDownload, downloadFile } from './files.js';
 
 const STATE_TEXT = Object.freeze({
   unberuehrt: '',
@@ -26,6 +28,37 @@ export function initActions(context) {
   $('btn-pdf').addEventListener('click', makePdf);
   $('btn-share').addEventListener('click', shareLink);
   $('btn-new').addEventListener('click', newCalculation);
+  $('btn-akte').addEventListener('click', exportAkte);
+  $('import-close').addEventListener('click', hideImportBanner);
+}
+
+/** Hinweis „Übernommen aus …“ ausblenden. */
+function hideImportBanner() {
+  $('import-banner').hidden = true;
+  $('import-text').textContent = '';
+}
+
+/** Hinweis nach Übernahme: Titel und die Felder, die nicht übergeben wurden (also noch QuickCalc-Standard sind). */
+function showImportBanner(calc, von) {
+  const passed = new Set(von.felder);
+  const missing = fieldsFor(calc.kind).filter((f) => !passed.has(f.key)).map((f) => f.label);
+  const title = calc.name || calc.akte?.titel || 'Ohne Namen';
+  const rest = missing.length > 0 ? missing.join(', ') : 'keine';
+  $('import-text').textContent = `Übernommen aus ${von.tool}: ${title} – Werte prüfen, nicht übergebene Felder: ${rest}`;
+  $('import-banner').hidden = false;
+}
+
+/** Objekt-Akte (Eckdaten, Quelle, QuickCalc-Bewertung) als <Titel>.akte.json herunterladen. */
+function exportAkte() {
+  try {
+    const calc = ctx.getSession().calc;
+    const akte = buildAkte(calc);
+    const title = calc.name || calc.akte?.titel || '';
+    downloadFile(JSON.stringify(akte, null, 2), akteFileName(title), 'application/json');
+    showStatus('Akte gespeichert');
+  } catch {
+    showStatus('Akte konnte nicht erstellt werden.');
+  }
 }
 
 /** Speicherzustand unter der Aktionsleiste. Wird bei jedem Zeichnen aufgerufen. */
@@ -56,6 +89,7 @@ function saveCurrent() {
 
 async function newCalculation() {
   if (!(await confirmDiscard())) return;
+  hideImportBanner();
   ctx.replaceSession(resetAll(ctx.getSession()));
 }
 
@@ -133,5 +167,7 @@ export async function checkIncomingLink() {
     ctx.leaveQuickie();
     ctx.replaceSession({ calc: shared.calc, carry: {}, mode: shared.mode });
     ctx.showView('rechner');
+    if (shared.uebernommen) showImportBanner(shared.calc, shared.uebernommen);
+    else hideImportBanner();
   }
 }

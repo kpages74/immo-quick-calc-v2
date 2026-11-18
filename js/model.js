@@ -21,6 +21,29 @@ const nowIso = () => new Date().toISOString();
 const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 const isIsoDate = (s) => typeof s === 'string' && s !== '' && !Number.isNaN(Date.parse(s));
 const text = (x, max) => (typeof x === 'string' ? x.slice(0, max) : '');
+const MAX_AKTE_TEXT = 500;
+
+/**
+ * Bezug zur Objekt-Akte (optional): { id, portal, inseratId, url, titel }. Ohne gültige id (Text) null.
+ * Fehlende Teile sind null, url nur als http(s)-Adresse. Wirft nicht.
+ */
+export function cleanAkteRef(raw) {
+  if (!isPlainObject(raw)) return null;
+  const part = (x) => {
+    const v = typeof x === 'number' && Number.isFinite(x) ? String(x) : text(x, MAX_AKTE_TEXT).trim();
+    return v === '' ? null : v;
+  };
+  const id = part(raw.id);
+  if (id === null) return null;
+  const url = part(raw.url);
+  return {
+    id,
+    portal: part(raw.portal),
+    inseratId: part(raw.inseratId),
+    url: url !== null && /^https?:\/\//i.test(url) ? url : null,
+    titel: part(raw.titel),
+  };
+}
 
 /** Eingaben einer Art mit Standardwerten: genau die Felder von fieldsFor(kind). */
 export function defaultInputs(kind) {
@@ -31,7 +54,7 @@ export function defaultInputs(kind) {
 
 /**
  * Neue Kalkulation. overrides: inputs (nur Felder der Art, über die Standardwerte gelegt),
- * name, address, note, priceSource. Unbekannte Art wirft einen Fehler.
+ * name, address, note, priceSource, akte (Bezug zur Objekt-Akte, optional). Unbekannte Art wirft einen Fehler.
  */
 export function createCalculation(kind, overrides = {}) {
   if (!KINDS.includes(kind)) throw new Error(`Unbekannte Art: ${kind}`);
@@ -44,6 +67,7 @@ export function createCalculation(kind, overrides = {}) {
   }
   const now = nowIso();
   const ps = isPlainObject(opts.priceSource) ? opts.priceSource : {};
+  const akte = cleanAkteRef(opts.akte);
   return {
     schema: SCHEMA_VERSION,
     id: newId(),
@@ -55,6 +79,7 @@ export function createCalculation(kind, overrides = {}) {
     kind,
     priceSource: { source: text(ps.source, MAX_NAME), date: text(ps.date, MAX_NAME) },
     inputs,
+    ...(akte ? { akte } : {}),
   };
 }
 
@@ -90,6 +115,7 @@ function normalizeUnsafe(raw) {
   const modified = isIsoDate(src.modified) ? src.modified : created;
   const id = typeof src.id === 'string' && src.id !== '' ? src.id : newId();
   const ps = isPlainObject(src.priceSource) ? src.priceSource : {};
+  const akte = cleanAkteRef(src.akte);
   return {
     schema: SCHEMA_VERSION,
     id,
@@ -101,6 +127,7 @@ function normalizeUnsafe(raw) {
     kind,
     priceSource: { source: text(ps.source, MAX_NAME), date: text(ps.date, MAX_NAME) },
     inputs,
+    ...(akte ? { akte } : {}),
   };
 }
 

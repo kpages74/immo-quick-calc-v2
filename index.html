@@ -26,6 +26,11 @@
           <img class="logo" src="icons/logo.png" width="504" height="188" alt="Elegnt Living QuickCalc">
         </header>
 
+        <div class="import-banner" id="import-banner" role="status" hidden>
+          <p class="import-text" id="import-text"></p>
+          <button type="button" class="import-close" id="import-close" aria-label="Hinweis schließen">×</button>
+        </div>
+
         <div class="controls">
           <div class="seg seg-main" id="seg-kind" role="group" aria-label="Nutzungsart">
             <button type="button" class="seg-btn" data-kind="quickie" aria-pressed="false">Quickie</button>
@@ -46,6 +51,7 @@
             <button type="button" class="btn action-btn" id="btn-pdf">PDF</button>
             <button type="button" class="btn action-btn" id="btn-share" aria-label="Link teilen">Teilen</button>
             <button type="button" class="btn action-btn" id="btn-new">Neu</button>
+            <button type="button" class="btn action-btn action-wide" id="btn-akte" title="Objekt-Akte (Eckdaten und QuickCalc-Bewertung) als Datei speichern">Akte exportieren</button>
           </div>
           <p class="save-state" id="save-state" aria-live="polite"></p>
         </div>
@@ -80,7 +86,7 @@
       <section id="view-einstellungen" class="view" aria-label="Einstellungen" hidden>
         <h1 class="page-title">Einstellungen</h1>
         <div id="settings-body"></div>
-        <p class="version">Immo Quick-Calc 2.0 · Cache iqc2-v9</p>
+        <p class="version">Immo Quick-Calc 2.0 · Cache iqc2-v10</p>
       </section>
 
     </main>

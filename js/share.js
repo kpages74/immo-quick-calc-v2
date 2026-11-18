@@ -1,6 +1,7 @@
 // Link teilen (Etappe 4): Kalkulation als base64url-Token im URL-Hash (#k=…). Rein: kein DOM, kein Speicher.
 // Nutzt TextEncoder/TextDecoder, btoa/atob. Alle Funktionen werfen nicht (decodeShare liefert null).
-import { normalizeCalculation } from './model.js';
+import { normalizeCalculation, cleanAkteRef } from './model.js';
+import { FIELDS } from './fields.js';
 
 const VERSION = 1;
 const MAX_TOKEN = 12000;
@@ -27,9 +28,31 @@ function fromBase64Url(token) {
   return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 }
 
-/** Token der Kalkulation (normalisiert) mit Modus. Ungültiger Modus: 'max'. */
-export function encodeShare(calc, mode) {
+/**
+ * Herkunft einer Übernahme aus einem anderen Werkzeug: { tool, version, datum, felder[] }.
+ * felder = Schlüssel der tatsächlich übergebenen Eingaben (nur bekannte Feldschlüssel). Ohne tool: null.
+ */
+export function cleanUebernommen(raw) {
+  if (!isPlainObject(raw)) return null;
+  const t = (x, max) => (typeof x === 'string' ? x.trim().slice(0, max) : '');
+  const tool = t(raw.tool, 40);
+  if (tool === '') return null;
+  const felder = Array.isArray(raw.felder)
+    ? [...new Set(raw.felder.filter((k) => typeof k === 'string' && Object.hasOwn(FIELDS, k)))].slice(0, 80)
+    : [];
+  return { tool, version: t(raw.version, 20), datum: t(raw.datum, 20), felder };
+}
+
+/**
+ * Token der Kalkulation (normalisiert) mit Modus. Ungültiger Modus: 'max'. Der Bezug zur Objekt-Akte (akte) reist mit.
+ * options.uebernommen ({ tool, version, datum, felder }): nur die genannten Eingaben werden übertragen, alle anderen
+ * bleiben beim Öffnen beim Standard der Empfänger-App; die Herkunft steht im Token (für den Hinweis „Übernommen aus …“).
+ */
+export function encodeShare(calc, mode, options = {}) {
   const c = normalizeCalculation(calc);
+  const von = cleanUebernommen(isPlainObject(options) ? options.uebernommen : null);
+  let inputs = c.inputs;
+  if (von !== null) inputs = Object.fromEntries(Object.entries(c.inputs).filter(([k]) => von.felder.includes(k)));
   const payload = {
     v: VERSION,
     kind: c.kind,
@@ -38,19 +61,21 @@ export function encodeShare(calc, mode) {
     address: c.address,
     note: c.note,
     priceSource: c.priceSource,
-    inputs: c.inputs,
+    inputs,
   };
+  if (c.akte) payload.akte = c.akte;
+  if (von !== null) payload.von = von;
   return toBase64Url(JSON.stringify(payload));
 }
 
 /** Adresse ohne Hash und Abfrage plus „#k=“ und Token. */
-export function shareUrl(baseUrl, calc, mode) {
+export function shareUrl(baseUrl, calc, mode, options = {}) {
   const base = String(baseUrl ?? '').split('#')[0].split('?')[0];
-  return `${base}#k=${encodeShare(calc, mode)}`;
+  return `${base}#k=${encodeShare(calc, mode, options)}`;
 }
 
 /**
- * Liest eine geteilte Kalkulation aus Hash oder Adresse. { calc, mode } oder null, wenn das Token fehlt,
+ * Liest eine geteilte Kalkulation aus Hash oder Adresse. { calc, mode, uebernommen } (uebernommen = Herkunft oder null) oder null, wenn das Token fehlt,
  * zu lang (über 12000 Zeichen), kaputt oder von einer anderen Version ist. Die id wird neu vergeben.
  */
 export function decodeShare(hashOrUrl) {
@@ -71,8 +96,9 @@ export function decodeShare(hashOrUrl) {
       note: data.note,
       priceSource: data.priceSource,
       inputs: data.inputs,
+      akte: data.akte,
     });
-    return { calc, mode: MODES.includes(data.mode) ? data.mode : 'max' };
+    return { calc, mode: MODES.includes(data.mode) ? data.mode : 'max', uebernommen: cleanUebernommen(data.von) };
   } catch {
     return null;
   }

@@ -58,6 +58,7 @@ export function findObject(list, id) {
 function isFresh(calc) {
   if (calc.name !== '' || calc.address !== '' || calc.note !== '') return false;
   if (calc.priceSource.source !== '' || calc.priceSource.date !== '') return false;
+  if (calc.akte) return false;
   const defaults = defaultInputs(calc.kind);
   return Object.keys(defaults).every((key) => calc.inputs[key] === defaults[key]);
 }

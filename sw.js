@@ -1,6 +1,6 @@
 // Service Worker der Immo Quick-Calc 2.0: Offline-Nutzung. Bei jeder Änderung der Dateien CACHE_NAME erhöhen,
 // damit alte Caches entfernt und die neuen Dateien geladen werden.
-const CACHE_NAME = 'iqc2-v9';
+const CACHE_NAME = 'iqc2-v10';
 
 const ASSETS = [
   './',
@@ -26,6 +26,9 @@ const ASSETS = [
   './js/share.js',
   './js/pricelist.js',
   './js/pdf.js',
+  './js/akte-export.js',
+  './akquise/addon/src/akte.js',
+  './akquise/addon/src/util.js',
   './js/ui/app.js',
   './js/ui/controls.js',
   './js/ui/scroll.js',
