@@ -222,6 +222,11 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 
 .hero { display: flex; flex-direction: column; min-width: 0; }
 
+/* „Angebot prüfen“: Marge und Gewinn nebeneinander; unter 360 px untereinander. */
+.hero-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.hero-col { display: flex; flex-direction: column; min-width: 0; }
+@media (max-width: 359px) { .hero-pair { grid-template-columns: 1fr; } }
+
 .hero .cap,
 .cell .cap {
   font-size: 13px;

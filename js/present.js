@@ -324,12 +324,15 @@ export function presentReport(session, now = new Date()) {
   const validNow = now instanceof Date && !Number.isNaN(now.getTime());
 
   const headline = withOffer
-    ? { label: 'Marge beim Angebot', value: r.margin, sub: `Gewinn ${r.profit} · ${r.profitPerSqm}` }
+    ? { label: 'Marge beim Angebot', value: r.margin, sub: '' }
     : {
       label: 'Max. Einkaufspreis',
       value: r.maxPrice,
       sub: [r.maxPricePerSqm, r.bid].filter(Boolean).join(' · '),
     };
+
+  // Mit Angebot: Gewinn beim Angebot neben der Marge (gleichwertig, Euro; darunter Gewinn je m²). Ohne Angebot: keiner.
+  const headlineZweit = withOffer ? { label: 'Gewinn beim Angebot', value: r.profit, sub: r.profitPerSqm } : null;
 
   const result = [];
   if (withOffer) {
@@ -394,6 +397,7 @@ export function presentReport(session, now = new Date()) {
     kindLabel: KIND_LABEL[kind],
     modeLabel: MODE_LABEL[s.mode],
     headline,
+    headlineZweit,
     ampel: r.ampel,
     ampelLine: `${r.ampelLabel} · ${r.ampelText}`,
     sections,

@@ -563,11 +563,14 @@ function maxView(r, kind) {
   return [hero, verdict(r), cells, limitLine(r), parkingLineNode(r)].filter(Boolean);
 }
 
-/** Ansicht „Angebot prüfen“ mit Angebotspreis: Marge und Gewinn beim Angebot. */
+/** Ansicht „Angebot prüfen“ mit Angebotspreis: Marge und Gewinn beim Angebot nebeneinander (schmal untereinander). */
 function offerView(r) {
-  const hero = el('div', 'hero');
-  hero.append(el('span', 'cap', 'Marge beim Angebot'), el('span', 'hero-fig fit', r.margin));
-  hero.append(el('span', 'sub', `Gewinn ${r.profit} · ${r.profitPerSqm}`));
+  const hero = el('div', 'hero hero-pair');
+  const marge = el('div', 'hero-col');
+  marge.append(el('span', 'cap', 'Marge beim Angebot'), el('span', 'hero-fig fit', r.margin));
+  const gewinn = el('div', 'hero-col');
+  gewinn.append(el('span', 'cap', 'Gewinn beim Angebot'), el('span', 'hero-fig fit', r.profit), el('span', 'sub', r.profitPerSqm));
+  hero.append(marge, gewinn);
 
   const cells = el('div', 'cells');
   cells.append(

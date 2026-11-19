@@ -7,6 +7,7 @@ const PAGE_W = 595.28;
 const PAGE_H = 841.89;
 const MARGIN_X = 48;
 const MARGIN_RIGHT_X = 547.28;
+const HEADLINE_ZWEIT_X = 298; // zweite Kennzahl im Ergebnisblock (rechts neben der Marge)
 const MARGIN_BOTTOM = 60;
 const HEADER_H = 90;
 const LOGO_H = 50;
@@ -394,14 +395,19 @@ export async function buildPdf(report, options = {}) {
 
   // Ergebnisblock
   need(28 + 18);
+  const zweit = isObj(r.headlineZweit) ? r.headlineZweit : null;
   put(MARGIN_X, y, 10, 'F1', GREY_RGB, str(headline.label));
+  if (zweit) put(HEADLINE_ZWEIT_X, y, 10, 'F1', GREY_RGB, str(zweit.label));
   y -= 28;
   put(MARGIN_X, y, 22, 'F2', BLACK_RGB, str(headline.value));
+  if (zweit) put(HEADLINE_ZWEIT_X, y, 22, 'F2', BLACK_RGB, str(zweit.value));
   y -= 18;
   const sub = str(headline.sub);
-  if (sub !== '') {
+  const zweitSub = zweit ? str(zweit.sub) : '';
+  if (sub !== '' || zweitSub !== '') {
     need(16);
-    put(MARGIN_X, y, 10, 'F1', GREY_RGB, sub);
+    if (sub !== '') put(MARGIN_X, y, 10, 'F1', GREY_RGB, sub);
+    if (zweitSub !== '') put(HEADLINE_ZWEIT_X, y, 10, 'F1', GREY_RGB, zweitSub);
     y -= 16;
   }
   need(22);
