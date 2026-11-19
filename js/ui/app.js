@@ -546,16 +546,23 @@ function renderNotes(r) {
   box.hidden = false;
 }
 
-/** Ansicht „Maximum ermitteln“ (auch Modus Angebot ohne Angebotspreis). */
+/** Ansicht „Maximum ermitteln“ (auch Modus Angebot ohne Angebotspreis): Max. Einkaufspreis und Gewinn nebeneinander (schmal untereinander). */
 function maxView(r, kind) {
-  const hero = el('div', 'hero');
-  hero.append(el('span', 'cap', 'Max. Einkaufspreis'), el('span', 'hero-fig fit', r.maxPrice));
+  const hero = el('div', 'hero hero-pair');
+  const maximum = el('div', 'hero-col');
   // Eine Zeile: €/m² und Gebot, das Gebot nur bei vorhandenem Wert.
-  hero.append(el('span', 'sub', [r.maxPricePerSqm, r.bid].filter(Boolean).join(' · ')));
+  maximum.append(
+    el('span', 'cap', 'Max. Einkaufspreis'),
+    el('span', 'hero-fig fit', r.maxPrice),
+    el('span', 'sub', [r.maxPricePerSqm, r.bid].filter(Boolean).join(' · ')),
+  );
+  const gewinn = el('div', 'hero-col');
+  gewinn.append(el('span', 'cap', 'Gewinn'), el('span', 'hero-fig fit', r.profit), el('span', 'sub', r.profitPerSqm));
+  hero.append(maximum, gewinn);
 
   const cells = el('div', 'cells');
   cells.append(
-    cell('Marge', r.margin, `${r.profit} · ${r.profitPerSqm}`),
+    cell('Marge', r.margin),
     cell('Verkaufspreis', r.salePrice, r.salePricePerSqm),
     cell('GIK', r.gik, r.gikPerSqm),
   );

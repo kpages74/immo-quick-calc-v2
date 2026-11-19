@@ -331,8 +331,11 @@ export function presentReport(session, now = new Date()) {
       sub: [r.maxPricePerSqm, r.bid].filter(Boolean).join(' · '),
     };
 
-  // Mit Angebot: Gewinn beim Angebot neben der Marge (gleichwertig, Euro; darunter Gewinn je m²). Ohne Angebot: keiner.
-  const headlineZweit = withOffer ? { label: 'Gewinn beim Angebot', value: r.profit, sub: r.profitPerSqm } : null;
+  // Mit Angebot: Gewinn beim Angebot neben der Marge. Ohne Angebot (Modus Maximum): Gewinn neben dem Max. Einkaufspreis.
+  // Gleichwertig, Euro; darunter Gewinn je m².
+  const headlineZweit = withOffer
+    ? { label: 'Gewinn beim Angebot', value: r.profit, sub: r.profitPerSqm }
+    : { label: 'Gewinn', value: r.profit, sub: r.profitPerSqm };
 
   const result = [];
   if (withOffer) {
@@ -346,7 +349,7 @@ export function presentReport(session, now = new Date()) {
     );
   } else {
     result.push(
-      ['Marge', `${r.margin} · ${r.profit} · ${r.profitPerSqm}`],
+      ['Marge', r.margin],
       ['Verkaufspreis', `${r.salePrice} · ${r.salePricePerSqm}`],
       ['GIK', `${r.gik} · ${r.gikPerSqm}`],
     );
