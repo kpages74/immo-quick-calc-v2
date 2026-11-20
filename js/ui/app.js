@@ -518,7 +518,7 @@ function showHelpPopup(title, text) {
   else dlg.setAttribute('open', '');
 }
 
-/** Zeile „Mit Stellplatz: …“ nur bei Stellplatz-Verkaufspreis. */
+/** Zeile „+ Stellplatz/Garage …“ (Hinweis: zählt in Gewinn und Marge, nicht in €/m²) nur bei Stellplatz-Verkaufspreis. */
 function parkingLineNode(r) {
   return r.parkingLine ? el('p', 'limit', r.parkingLine) : null;
 }

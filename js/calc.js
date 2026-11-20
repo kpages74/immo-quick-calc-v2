@@ -82,7 +82,7 @@ function context(kind, inputs, options = {}) {
   const annualRent = monthlyRent === null ? null : monthlyRent * 12;
 
   // Schritt 2: Verkaufspreis der Wohnung. Rendite-Grenze nur aus der Kernmiete, ohne Stellplatz.
-  // Der Stellplatz-Verkaufspreis wird nicht zu den Grenzen addiert, sondern erst als Zusatz (salePriceTotal).
+  // Der Stellplatz-Verkaufspreis wird nicht zu den Grenzen addiert; er fließt nur in Gewinn, Marge und Max. Einkaufspreis.
   const minYield = read(inputs, 'minYield');
   const maxPerSqm = read(inputs, 'maxSalePricePerSqm');
   let yieldLimit = null;
@@ -133,7 +133,7 @@ function context(kind, inputs, options = {}) {
   const v = read(inputs, 'salesCommissionPercent') / 100;
   const salesCommission = salePrice === null ? null : salePrice * v;
   const saleNet = salePrice === null ? null : salePrice * (1 - v);
-  // Stellplatz-Verkaufspreis nach Vertriebskosten: zusätzlicher Gewinn, nicht Teil der Marge der Wohnung.
+  // Stellplatz-Verkaufspreis nach Vertriebskosten: zählt voll in Gewinn, Marge und Max. Einkaufspreis, nicht in €/m² der Wohnung.
   const parkingNet = parkingSalePrice * (1 - v);
 
   // Schritt 4: Marge
@@ -143,10 +143,10 @@ function context(kind, inputs, options = {}) {
   const effectiveMargin = softened ? targetMargin : Math.max(targetMargin, RULE_MARGIN);
   const m = effectiveMargin / 100;
 
-  // Maximaler Einkaufspreis: saleNet = (1 + m) × GIK mit GIK = EK (1 + p + φ) + S + O + H
+  // Maximaler Einkaufspreis: saleNet + parkingNet = (1 + m) × GIK mit GIK = EK (1 + p + φ) + S + O + H
   let maxPurchasePriceExact = null;
   if (saleNet !== null) {
-    maxPurchasePriceExact = finiteOrNull((saleNet / (1 + m) - renovationTotal - otherCosts - holdingCosts) / (1 + p + phi));
+    maxPurchasePriceExact = finiteOrNull(((saleNet + parkingNet) / (1 + m) - renovationTotal - otherCosts - holdingCosts) / (1 + p + phi));
   }
   const maxPurchasePrice = maxPurchasePriceExact === null ? null : Math.floor(maxPurchasePriceExact + 1e-6);
   const bidRecommendation = maxPurchasePriceExact !== null && maxPurchasePriceExact > 0
@@ -213,21 +213,18 @@ function evaluateWith(c, P) {
   const totalInvestment = P * (1 + c.p + c.phi) + c.renovationTotal + c.otherCosts + c.holdingCosts;
 
   const hasSale = c.saleNet !== null;
-  const profit = hasSale ? c.saleNet - totalInvestment : null;
+  // Gewinn: Wohnung nach Vertriebskosten plus Stellplatz/Garage nach Vertriebskosten, abzüglich Gesamtinvestition.
+  const profit = hasSale ? c.saleNet + c.parkingNet - totalInvestment : null;
   const marginPercent = hasSale && totalInvestment > 0 ? (profit / totalInvestment) * 100 : null;
   const ampel = trafficLight(marginPercent, profit, c.inputs);
-  const requiredSalePrice = c.v < 1 ? ((1 + RULE_MARGIN / 100) * totalInvestment) / (1 - c.v) : null;
-  // Gewinn mit Stellplatz: Gewinn der Wohnung plus Stellplatz-Verkaufspreis nach Vertriebskosten.
-  const profitTotal = hasSale ? profit + c.parkingNet : null;
-  const marginTotalPercent = hasSale && totalInvestment > 0 ? finiteOrNull((profitTotal / totalInvestment) * 100) : null;
+  // Nötiger Verkaufspreis der Wohnung für Regelmarge: Stellplatz-Erlös nach Vertrieb wird abgezogen.
+  const requiredSalePrice = c.v < 1 ? (((1 + RULE_MARGIN / 100) * totalInvestment) - c.parkingNet) / (1 - c.v) : null;
 
   return {
     purchasePrice: P,
     parkingSalePrice: c.parkingSalePrice,
     parkingNet: c.parkingNet,
     salePriceTotal: c.salePriceTotal,
-    profitTotal,
-    marginTotalPercent,
     closingCosts,
     closingBreakdown: {
       broker: P * (read(c.inputs, 'brokerPercent') / 100),
@@ -263,8 +260,6 @@ function unpricedEvaluation() {
     totalInvestment: null,
     profit: null,
     marginPercent: null,
-    profitTotal: null,
-    marginTotalPercent: null,
     ampel: AMPEL.RED,
     purchasePricePerSqm: null,
     totalInvestmentPerSqm: null,
@@ -292,7 +287,7 @@ export function trafficLight(marginPercent, profit, inputs) {
 
 /**
  * Vorwärtsrechnung für einen Einkaufspreis P. Liefert Nebenkosten, Finanzierung, GIK, Gewinn, Marge,
- * Ampel und die Verkaufspreise, die für 20 % Marge nötig wären.
+ * Ampel und den Wohnungs-Verkaufspreis, der für 20 % Marge nötig wäre (Stellplatz-Erlös bereits abgezogen).
  */
 export function evaluatePurchase(kind, inputs, purchasePrice) {
   const P = Number.isFinite(purchasePrice) ? purchasePrice : 0;

@@ -112,17 +112,15 @@ export function presentResult(session) {
     bufferText = `Puffer ${Fmt.euro(r.buffer)} bis zum m²-Deckel`;
   }
 
-  // Zusatzzeile mit Stellplatz: Verkaufspreis, Gewinn und Marge inkl. Stellplatz-Verkaufspreis. Leer ohne Stellplatz-Verkaufspreis.
-  // Ohne möglichen Ankauf im Modus Maximum keine Zeile, da dort auch Gewinn und Marge fehlen.
-  const totalBasis = useOffer ? offer : (maxOk ? r : null);
-  const parkingValues = r.parkingSalePrice > 0 && r.salePriceTotal !== null && totalBasis !== null
-    ? `Verkaufspreis ${Fmt.euro(r.salePriceTotal)} · Gewinn ${Fmt.euro(totalBasis.profitTotal)} · Marge ${Fmt.percent(totalBasis.marginTotalPercent)}`
+  // Hinweis Stellplatz: Der Stellplatz-Verkaufspreis zählt in Gewinn und Marge, nicht in €/m². Leer ohne Stellplatz-Verkaufspreis.
+  const parkingValues = r.parkingSalePrice > 0
+    ? `${Fmt.euro(r.parkingSalePrice)} · in Gewinn und Marge enthalten, nicht in €/m²`
     : '';
 
   return {
     mode: s.mode,
     parkingValues,
-    parkingLine: parkingValues === '' ? '' : `Mit Stellplatz: ${parkingValues}`,
+    parkingLine: parkingValues === '' ? '' : `+ Stellplatz/Garage ${parkingValues}`,
     maxPrice: maxOk ? Fmt.euro(r.maxPurchasePrice) : DASH,
     // compute liefert ohne Einkaufspreis 0 statt null (perSqm(null, Fläche)); hier abgefangen.
     maxPricePerSqm: maxOk ? Fmt.perSqm(r.maxPurchasePricePerSqm) : DASH,
@@ -227,7 +225,7 @@ export function fieldHint(session, key) {
       return `Summe ${Fmt.percent(r.knkSumPercent)} · gerechnet mit ${Fmt.fieldNumber(r.knkPercent, 0)}${NBSP}%`;
     case 'parkingSalePrice': {
       if (inputs.parkingSalePrice <= 0 || r.salePrice === null) return '';
-      const text = `Zusätzlicher Gewinn ${Fmt.euro(r.parkingNet)} · ändert den Einkaufspreis nicht`;
+      const text = `Erlös nach Vertrieb ${Fmt.euro(r.parkingNet)} · zählt in Gewinn und Marge, nicht in €/m²`;
       if (inputs.parkingRentSeparate === true && r.parkingRentAnnual > 0) {
         return `${text} · Rendite Stellplatz ${Fmt.percent(r.parkingRentAnnual / inputs.parkingSalePrice * 100)}`;
       }
@@ -357,7 +355,7 @@ export function presentReport(session, now = new Date()) {
   }
   const limit = limitRow(r);
   if (limit) result.push(limit);
-  if (r.parkingValues !== '') result.push(['Mit Stellplatz', r.parkingValues]);
+  if (r.parkingValues !== '') result.push(['Stellplatz/Garage', r.parkingValues]);
 
   const sections = [{ title: 'Ergebnis', rows: result }];
 
