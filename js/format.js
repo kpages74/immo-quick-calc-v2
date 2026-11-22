@@ -71,6 +71,10 @@ export const Fmt = Object.freeze({
 const FIELD_SUFFIX = Object.freeze({ euro: '€', euroPerSqm: '€/m²', squareMeter: 'm²', percent: '%', months: 'Monate', rooms: 'Zimmer', pieces: 'Stk.' });
 export function fieldDisplay(spec, value) {
   if (spec.unit === 'bool') return value === true ? 'Ja' : 'Nein';
+  if (spec.unit === 'choice') {
+    const option = spec.options.find((o) => o.value === value);
+    return option ? option.label : DASH;
+  }
   const sign = spec.signed && value >= 0 ? '+' : '';
   return sign + Fmt.fieldNumber(value, spec.digits) + NBSP + FIELD_SUFFIX[spec.unit];
 }

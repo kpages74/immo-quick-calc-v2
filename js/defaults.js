@@ -1,7 +1,7 @@
 // Eigene Standardwerte je Nutzungsart (Etappe 4). Rein: kein DOM, kein Speicher.
 // Form: { [art]: { [feld]: wert } }. Gespeichert wird nur, was vom Werksstandard abweicht.
 import { fieldsFor, factoryDefaultFor, clampField } from './fields.js';
-import { RULE_MARGIN } from './calc.js';
+import { RULE_MARGIN, parkingMode } from './calc.js';
 import { KINDS } from './model.js';
 
 const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
@@ -9,6 +9,7 @@ const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArr
 /** Gesäuberter Wert eines Feldes oder undefined. offerPrice wird vorher ausgeschlossen. */
 function cleanValue(field, value) {
   if (field.unit === 'bool') return typeof value === 'boolean' ? value : undefined;
+  if (field.unit === 'choice') return field.options.some((o) => o.value === value) ? value : undefined;
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
   return clampField(field.key, value);
 }
@@ -27,6 +28,11 @@ export function cleanDefaults(raw) {
       const entries = src[kind];
       const clean = {};
       for (const field of fieldsFor(kind)) {
+        // Stellplatzmiete: gespeicherter alter Schalter parkingRentSeparate wird zum Modus (Migration).
+        if (field.key === 'parkingRentMode') {
+          clean[field.key] = parkingMode(entries);
+          continue;
+        }
         if (field.key === 'offerPrice' || !Object.hasOwn(entries, field.key)) continue;
         const value = cleanValue(field, entries[field.key]);
         if (value !== undefined) clean[field.key] = value;

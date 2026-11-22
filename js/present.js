@@ -1,7 +1,7 @@
 // Fertige Anzeigetexte für die Oberfläche. Rein, keine DOM-Zugriffe.
 // Alle Rechenwerte kommen aus compute/scenarios mit effectiveInputs(session); hier stehen keine eigenen Formeln.
 // Geldbeträge als ganze Euro (Fmt.euro), €/m² und % mit zwei Nachkommastellen (Fmt.perSqm, Fmt.percent).
-import { compute, scenarios, RULE_MARGIN, AMPEL, LIMIT, KIND } from './calc.js';
+import { compute, scenarios, parkingMode, RULE_MARGIN, AMPEL, LIMIT, KIND, PARKING_MODE } from './calc.js';
 import { Fmt, fieldDisplay } from './format.js';
 import { FIELD_LIST, FIELDS, GROUPS, fieldsFor, factoryDefaultFor } from './fields.js';
 import { normalizeSession, effectiveInputs } from './session.js';
@@ -20,7 +20,7 @@ const DASH = '–';
 const MINUS = '−';
 /** Felder, die nur bei aufgeweichter Marge sichtbar sind. */
 const SOFTENED_ONLY = Object.freeze(['marginFloor', 'minProfit']);
-/** Felder für Stellplatz-Miete, nur sichtbar bei separat vermietetem Stellplatz (Schalter parkingRentSeparate). */
+/** Felder für Stellplatz-Miete, sichtbar bei Stellplatzmiete „Separat“ oder „In Kaltmiete“ (parkingRentMode). */
 const PARKING_RENT_ONLY = Object.freeze(['parkingRent', 'parkingCount']);
 const AMPEL_LABEL = Object.freeze({ [AMPEL.GREEN]: 'Grün', [AMPEL.YELLOW]: 'Gelb', [AMPEL.RED]: 'Rot' });
 const LIMIT_TEXT = Object.freeze({
@@ -112,15 +112,17 @@ export function presentResult(session) {
     bufferText = `Puffer ${Fmt.euro(r.buffer)} bis zum m²-Deckel`;
   }
 
-  // Hinweis Stellplatz: Der Stellplatz-Verkaufspreis zählt in Gewinn und Marge, nicht in €/m². Leer ohne Stellplatz-Verkaufspreis.
-  const parkingValues = r.parkingSalePrice > 0
-    ? `${Fmt.euro(r.parkingSalePrice)} · in Gewinn und Marge enthalten, nicht in €/m²`
+  // Zusatzzeile mit Stellplatz: Verkaufspreis, Gewinn und Marge inkl. Stellplatz-Verkaufspreis. Leer ohne Stellplatz-Verkaufspreis.
+  // Ohne möglichen Ankauf im Modus Maximum keine Zeile, da dort auch Gewinn und Marge fehlen.
+  const totalBasis = useOffer ? offer : (maxOk ? r : null);
+  const parkingValues = r.parkingSalePrice > 0 && r.salePriceTotal !== null && totalBasis !== null
+    ? `Verkaufspreis ${Fmt.euro(r.salePriceTotal)} · Gewinn ${Fmt.euro(totalBasis.profitTotal)} · Marge ${Fmt.percent(totalBasis.marginTotalPercent)}`
     : '';
 
   return {
     mode: s.mode,
     parkingValues,
-    parkingLine: parkingValues === '' ? '' : `+ Stellplatz/Garage ${parkingValues}`,
+    parkingLine: parkingValues === '' ? '' : `Mit Stellplatz: ${parkingValues}`,
     maxPrice: maxOk ? Fmt.euro(r.maxPurchasePrice) : DASH,
     // compute liefert ohne Einkaufspreis 0 statt null (perSqm(null, Fläche)); hier abgefangen.
     maxPricePerSqm: maxOk ? Fmt.perSqm(r.maxPurchasePricePerSqm) : DASH,
@@ -183,6 +185,19 @@ export function presentScenarios(session) {
   });
 }
 
+/**
+ * Anzeigename eines Feldes in der Sitzung. Miete Stellplatz/Garage heißt im Modus „In Kaltmiete“ „davon …“,
+ * weil sie dann schon in der Miete steckt. Sonst der Name aus fields.js.
+ */
+export function fieldLabel(session, key) {
+  const field = FIELDS[key];
+  if (!field) return '';
+  if (key === 'parkingRent' && parkingMode(normalizeSession(session).calc.inputs) === PARKING_MODE.INKL) {
+    return 'davon Stellplatz/Garage p. M.';
+  }
+  return field.label;
+}
+
 /** Zusatztext unter einem Feld oder ''. Nur für Felder der aktuellen Art. */
 export function fieldHint(session, key) {
   const s = normalizeSession(session);
@@ -198,7 +213,17 @@ export function fieldHint(session, key) {
         ? ''
         : `Soll-Miete ${Fmt.euro(r.targetRent)} · ${Fmt.perSqm(r.targetRentPerSqm)}`;
     case 'rent':
+      if (r.parkingMode === PARKING_MODE.INKL) {
+        // Gesamte Ist-Miete je m² (inkl. Stellplatz), nicht die Kernmiete.
+        return inputs.livingArea > 0 ? `${Fmt.perSqm(inputs.rent / inputs.livingArea)} inkl. Stellplatz` : '';
+      }
       return r.currentRentPerSqm === null ? '' : Fmt.perSqm(r.currentRentPerSqm);
+    case 'parkingRent': {
+      if (r.parkingMode === PARKING_MODE.SEPARAT) return 'Kommt zur Kaltmiete dazu · zählt nur für die Rendite des Käufers';
+      if (r.parkingMode !== PARKING_MODE.INKL || r.parkingCoreMonthly === null) return '';
+      const perSqm = inputs.livingArea > 0 ? ` · ${Fmt.perSqm(r.parkingCoreMonthly / inputs.livingArea)}` : '';
+      return `Wohnung ${Fmt.euro(r.parkingCoreMonthly)}${perSqm} · nur damit wird der Einkaufspreis gerechnet`;
+    }
     case 'rentPerSqm':
       // Gesamtmiete der Wohnung im Monat (Miete je m² × Wohnfläche).
       return inputs.livingArea > 0 && inputs.rentPerSqm > 0
@@ -225,8 +250,8 @@ export function fieldHint(session, key) {
       return `Summe ${Fmt.percent(r.knkSumPercent)} · gerechnet mit ${Fmt.fieldNumber(r.knkPercent, 0)}${NBSP}%`;
     case 'parkingSalePrice': {
       if (inputs.parkingSalePrice <= 0 || r.salePrice === null) return '';
-      const text = `Erlös nach Vertrieb ${Fmt.euro(r.parkingNet)} · zählt in Gewinn und Marge, nicht in €/m²`;
-      if (inputs.parkingRentSeparate === true && r.parkingRentAnnual > 0) {
+      const text = `Zusätzlicher Gewinn ${Fmt.euro(r.parkingNet)} · ändert den Einkaufspreis nicht`;
+      if (r.parkingMode === PARKING_MODE.SEPARAT && r.parkingRentAnnual > 0) {
         return `${text} · Rendite Stellplatz ${Fmt.percent(r.parkingRentAnnual / inputs.parkingSalePrice * 100)}`;
       }
       return text;
@@ -274,10 +299,10 @@ export function visibleFields(session) {
   const s = normalizeSession(session);
   const kind = s.calc.kind;
   const softened = s.calc.inputs.softened === true;
-  const separat = s.calc.inputs.parkingRentSeparate === true;
+  const parkingShown = parkingMode(s.calc.inputs) !== PARKING_MODE.KEINE;
   return FIELD_LIST.filter((f) => f.kinds.includes(kind)
     && !(SOFTENED_ONLY.includes(f.key) && !softened)
-    && !(PARKING_RENT_ONLY.includes(f.key) && !separat)
+    && !(PARKING_RENT_ONLY.includes(f.key) && !parkingShown)
     && !(f.key === 'offerPrice' && s.mode !== 'check'));
 }
 
@@ -355,7 +380,7 @@ export function presentReport(session, now = new Date()) {
   }
   const limit = limitRow(r);
   if (limit) result.push(limit);
-  if (r.parkingValues !== '') result.push(['Stellplatz/Garage', r.parkingValues]);
+  if (r.parkingValues !== '') result.push(['Mit Stellplatz', r.parkingValues]);
 
   const sections = [{ title: 'Ergebnis', rows: result }];
 
@@ -365,7 +390,7 @@ export function presentReport(session, now = new Date()) {
     if (group.key === 'szenarien' || group.key === 'pruefung') continue;
     const fields = visible.filter((f) => f.group === group.key);
     if (fields.length === 0) continue;
-    const rows = fields.map((f) => [f.label, reportFieldValue(f, s.calc.inputs[f.key])]);
+    const rows = fields.map((f) => [fieldLabel(s, f.key), reportFieldValue(f, s.calc.inputs[f.key])]);
     if (group.key === 'kosten') {
       const hint = fieldHint(s, 'notaryPercent');
       if (hint !== '') rows.push(['Kaufnebenkosten', hint]);
@@ -418,13 +443,11 @@ export function presentDefaults(overrides, kind) {
   const entries = overrides[kind];
   if (entries === null || typeof entries !== 'object') return [];
   const show = (field, value) => (field.unit === 'bool' ? (value === true ? 'Ja' : 'Nein') : fieldDisplay(field, value));
-  // Stellplatz-Miete nur, wenn der Stellplatz separat vermietet ist (eigener Wert oder Werksstandard).
-  const separat = Object.hasOwn(entries, 'parkingRentSeparate')
-    ? entries.parkingRentSeparate === true
-    : factoryDefaultFor('parkingRentSeparate', kind) === true;
+  // Stellplatz-Miete nur, wenn der Stellplatz vermietet ist: „Separat“ oder „In Kaltmiete“ (eigener Wert oder Werksstandard).
+  const parkingShown = parkingMode(entries) !== PARKING_MODE.KEINE;
   return FIELD_LIST
     .filter((f) => f.key !== 'offerPrice' && f.kinds.includes(kind) && Object.hasOwn(entries, f.key))
-    .filter((f) => !(PARKING_RENT_ONLY.includes(f.key) && !separat))
+    .filter((f) => !(PARKING_RENT_ONLY.includes(f.key) && !parkingShown))
     .map((f) => ({
       key: f.key,
       label: f.label,

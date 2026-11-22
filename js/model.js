@@ -1,6 +1,7 @@
 // Datenmodell der Kalkulation (Etappe 2): Standardwerte, Anlegen, Normalisieren beim Import, Artwechsel.
 // Keine DOM- oder localStorage-Zugriffe.
 import { fieldsFor, defaultFor, clampField } from './fields.js';
+import { parkingMode } from './calc.js';
 
 export const SCHEMA_VERSION = 1;
 export const KINDS = Object.freeze(['vermietet', 'kap', 'en', 'wg']);
@@ -91,6 +92,9 @@ function normalizeValue(field, value, kind) {
     if (typeof value === 'number' && Number.isFinite(value)) return value !== 0;
     return fallback;
   }
+  if (field.unit === 'choice') {
+    return field.options.some((o) => o.value === value) ? value : fallback;
+  }
   if (field.key === 'offerPrice') {
     // Angebotspreis: nur Zahl > 0, sonst null (kein Angebot).
     if (typeof value === 'number' && Number.isFinite(value) && value > 0) return clampField(field.key, value);
@@ -107,7 +111,10 @@ function normalizeUnsafe(raw) {
   const rawInputs = isPlainObject(src.inputs) ? src.inputs : {};
   const inputs = {};
   for (const f of fieldsFor(kind)) {
-    const value = Object.hasOwn(rawInputs, f.key) ? rawInputs[f.key] : undefined;
+    // Stellplatzmiete: alter Schalter parkingRentSeparate wird übernommen (siehe parkingMode in calc.js).
+    const value = f.key === 'parkingRentMode'
+      ? parkingMode(rawInputs)
+      : (Object.hasOwn(rawInputs, f.key) ? rawInputs[f.key] : undefined);
     inputs[f.key] = normalizeValue(f, value, kind);
   }
   const now = nowIso();

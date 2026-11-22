@@ -7,7 +7,8 @@ import {
   loadPriceList, savePriceList, clearPriceList as removePriceList,
 } from '../store.js';
 import { setInput, setText, setMode, switchKind, resetGroup } from '../session.js';
-import { presentResult, presentScenarios, fieldHint, visibleFields, fieldRange } from '../present.js';
+import { presentResult, presentScenarios, fieldHint, fieldLabel, visibleFields, fieldRange } from '../present.js';
+import { parkingMode, PARKING_MODE } from '../calc.js';
 import { FIELDS, GROUPS, setDefaultOverrides } from '../fields.js';
 import { Fmt, fieldDisplay, parseNumber } from '../format.js';
 import { cleanLibrary } from '../library.js';
@@ -123,7 +124,7 @@ function displayOf(key, value) {
 /** Schlüssel, bei dessen Änderung sich die Menge der sichtbaren Felder ändert: nur dann wird das Formular neu aufgebaut. */
 // Erlaubt einen Zeilenumbruch nach dem Schrägstrich (unsichtbares Trennzeichen), damit schmale Bildschirme nicht mitten im Wort trennen.
 const breakable = (text) => String(text).replace(/\//g, "/\u200b");
-const formKeyOf = (s) => `${s.calc.kind}|${s.mode}|${s.calc.inputs.softened === true}|${s.calc.inputs.parkingRentSeparate === true}`;
+const formKeyOf = (s) => `${s.calc.kind}|${s.mode}|${s.calc.inputs.softened === true}|${parkingMode(s.calc.inputs) !== PARKING_MODE.KEINE}`;
 
 // MARK: - Zahlenfeld, Schalter, Textfeld
 
@@ -167,7 +168,8 @@ function numberRow(key) {
   const head = el('div', 'row-head');
   const labelWrap = el('div', 'label-wrap');
   const labelLine = el('div', 'label-line');
-  labelLine.append(el('span', 'label', breakable(spec.label)));
+  const labelText = el('span', 'label', breakable(spec.label));
+  labelLine.append(labelText);
   let helpBox = null;
   if (spec.help) {
     const pair = helpPair(`field:${key}`, `Erklärung: ${spec.label}`, spec.help);
@@ -250,6 +252,11 @@ function numberRow(key) {
 
   const update = (s) => {
     const value = s.calc.inputs[key];
+    // Bezeichnung kann sich mit dem Modus ändern (z. B. Stellplatzmiete „davon …“).
+    const label = fieldLabel(s, key);
+    if (labelText.textContent !== breakable(label)) labelText.textContent = breakable(label);
+    pill.setAttribute('aria-label', label);
+    slider.setAttribute('aria-label', label);
     // Das gerade bearbeitete Feld wird nicht überschrieben.
     if (document.activeElement !== pill) {
       pill.value = displayOf(key, value);
@@ -308,6 +315,52 @@ function switchRow(key) {
     const on = s.calc.inputs[key] === true;
     btn.setAttribute('aria-checked', String(on));
     btn.classList.toggle('is-on', on);
+  };
+  return { node: root, update };
+}
+
+/**
+ * Auswahl mit Segment-Knöpfen (unit 'choice'), z. B. Stellplatz-/Garagenmiete: Keine · Separat · In Kaltmiete.
+ * Die Knöpfe stehen in options der Feldspezifikation; aria-pressed zeigt die gewählte Option.
+ */
+function choiceRow(key) {
+  const spec = FIELDS[key];
+  const root = el('div', 'row row-choice');
+  const head = el('div', 'row-head');
+  const labelWrap = el('div', 'label-wrap');
+  const labelLine = el('div', 'label-line');
+  labelLine.append(el('span', 'label', breakable(spec.label)));
+  let helpBox = null;
+  if (spec.help) {
+    const pair = helpPair(`field:${key}`, `Erklärung: ${spec.label}`, spec.help);
+    labelLine.append(pair.button);
+    helpBox = pair.box;
+  }
+  labelWrap.append(labelLine);
+  head.append(labelWrap);
+
+  const seg = el('div', 'seg seg-mode');
+  seg.setAttribute('role', 'group');
+  seg.setAttribute('aria-label', spec.label);
+  const buttons = spec.options.map((option) => {
+    const btn = el('button', 'seg-btn', option.label);
+    btn.type = 'button';
+    btn.dataset.value = option.value;
+    btn.dataset.focusKey = `choice:${key}:${option.value}`;
+    btn.setAttribute('aria-pressed', 'false');
+    btn.addEventListener('click', () => {
+      if (session.calc.inputs[key] !== option.value) commit(setInput(session, key, option.value));
+    });
+    seg.append(btn);
+    return btn;
+  });
+
+  root.append(head, seg);
+  if (helpBox) root.append(helpBox);
+
+  const update = (s) => {
+    const value = s.calc.inputs[key];
+    for (const btn of buttons) btn.setAttribute('aria-pressed', String(btn.dataset.value === value));
   };
   return { node: root, update };
 }
@@ -413,7 +466,9 @@ function buildForm() {
       addWidget(body, noteRow());
     }
     for (const spec of specs) {
-      addWidget(body, spec.unit === 'bool' ? switchRow(spec.key) : numberRow(spec.key));
+      addWidget(body, spec.unit === 'bool' ? switchRow(spec.key)
+        : spec.unit === 'choice' ? choiceRow(spec.key)
+          : numberRow(spec.key));
       // Richtpreis-Block direkt nach dem Verkaufspreis je m² (Deckel).
       if (spec.key === 'maxSalePricePerSqm') addWidget(body, createPriceBox(ctx));
     }
@@ -424,7 +479,7 @@ function buildForm() {
     formEl.append(details);
   }
 
-  if (focused.startsWith('switch:') || focused.startsWith('std:')) {
+  if (focused.startsWith('switch:') || focused.startsWith('std:') || focused.startsWith('choice:')) {
     formEl.querySelector(`[data-focus-key="${focused}"]`)?.focus();
   }
 }
@@ -518,7 +573,7 @@ function showHelpPopup(title, text) {
   else dlg.setAttribute('open', '');
 }
 
-/** Zeile „+ Stellplatz/Garage …“ (Hinweis: zählt in Gewinn und Marge, nicht in €/m²) nur bei Stellplatz-Verkaufspreis. */
+/** Zeile „Mit Stellplatz: …“ nur bei Stellplatz-Verkaufspreis. */
 function parkingLineNode(r) {
   return r.parkingLine ? el('p', 'limit', r.parkingLine) : null;
 }

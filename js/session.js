@@ -16,10 +16,11 @@ const nowIso = () => new Date().toISOString();
 
 /**
  * Wert eines Feldes säubern. Liefert undefined, wenn der Wert nicht passt (dann bleibt alles unverändert).
- * Bool-Felder: nur boolean. offerPrice: null oder Zahl; ≤ 0 wird null. Sonst: endliche Zahl, auf Bereich begrenzt.
+ * Bool-Felder: nur boolean. Auswahl-Felder (unit 'choice'): nur ein Wert aus options. offerPrice: null oder Zahl; ≤ 0 wird null. Sonst: endliche Zahl, auf Bereich begrenzt.
  */
 function cleanValue(field, value) {
   if (field.unit === 'bool') return typeof value === 'boolean' ? value : undefined;
+  if (field.unit === 'choice') return field.options.some((o) => o.value === value) ? value : undefined;
   if (field.key === 'offerPrice') {
     if (value === null) return null;
     if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
