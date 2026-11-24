@@ -43,16 +43,6 @@ function ampelText(ampel, margin, threshold) {
   return margin === null ? 'Nicht berechenbar' : `Marge unter ${yellow} %`;
 }
 
-/** Abweichung eines Angebots vom ganzzahligen Maximum. */
-function deltaText(price, max) {
-  if (typeof max !== 'number' || !Number.isFinite(max)) return 'Kein Maximum berechenbar';
-  const d = Math.round(price - max);
-  if (d === 0) return 'Genau am Maximum';
-  return d > 0
-    ? `${Fmt.euro(d)} über dem Maximum`
-    : `${Fmt.euro(-d)} unter dem Maximum`;
-}
-
 /** Betrag mit Vorzeichen: „+4.324 €“, „−4.324 €“, „±0 €“. */
 function signedEuro(d) {
   if (typeof d !== 'number' || !Number.isFinite(d)) return DASH;
@@ -112,8 +102,8 @@ export function presentResult(session) {
 
   return {
     mode: s.mode,
-    // Beschriftung der Zeile „Nötiger Verkaufspreis …“: die grüne Marge (Zielmarge, mindestens 20 %).
-    requiredLabel: `Nötiger Verkaufspreis für ${marginText(r.greenThreshold)} %`,
+    // Zielmarge als Anzeigetext (wie das Feld „Zielmarge“).
+    targetMargin: fieldDisplay(FIELDS.targetMargin, inputs.targetMargin),
     maxPrice: maxOk ? Fmt.euro(r.maxPurchasePrice) : DASH,
     // compute liefert ohne Einkaufspreis 0 statt null (perSqm(null, Fläche)); hier abgefangen.
     maxPricePerSqm: maxOk ? Fmt.perSqm(r.maxPurchasePricePerSqm) : DASH,
@@ -133,7 +123,7 @@ export function presentResult(session) {
     offer: useOffer
       ? {
         price: Fmt.euro(offer.purchasePrice),
-        deltaText: deltaText(offer.purchasePrice, r.maxPurchasePrice),
+        pricePerSqm: Fmt.perSqm(offer.purchasePricePerSqm),
         requiredSalePrice: Fmt.euro(offer.requiredSalePrice),
         requiredSalePricePerSqm: Fmt.perSqm(offer.requiredSalePricePerSqm),
       }
@@ -316,6 +306,8 @@ export function fieldRange(session, key) {
 
 const APP_NAME = 'Immo Quick-Calc 2.0';
 const MODE_LABEL = Object.freeze({ max: 'Maximum ermitteln', check: 'Angebot prüfen' });
+/** Beschriftung der Zeile „Nötiger Verkaufspreis …“ (Oberfläche und Bericht): Zielmarge, Angebotspreis als Grundlage. */
+export const REQUIRED_SALE_LABEL = 'Nötiger Verkaufspreis für Zielmarge bei Angebotspreis';
 
 /** Anzeige eines Feldwerts im Bericht: Ja/Nein, „–“ ohne Wert, sonst wie in der Oberfläche. */
 function reportFieldValue(field, value) {
@@ -337,29 +329,30 @@ export function presentReport(session, now = new Date()) {
   const scenarioTitle = `Szenarien (Abweichung ${fieldDisplay(FIELDS.scenarioPercent, s.calc.inputs.scenarioPercent)})`;
   const validNow = now instanceof Date && !Number.isNaN(now.getTime());
 
+  // Mit Angebot: Angebotspreis links, Gewinn beim Angebot rechts (Marge und Gewinn je m² darunter).
+  // Ohne Angebot (Modus Maximum): Max. Einkaufspreis und Gewinn.
   const headline = withOffer
-    ? { label: 'Marge beim Angebot', value: r.margin, sub: '' }
+    ? { label: 'Angebotspreis', value: r.offer.price, sub: r.offer.pricePerSqm }
     : {
       label: 'Max. Einkaufspreis',
       value: r.maxPrice,
       sub: r.maxPricePerSqm,
     };
 
-  // Mit Angebot: Gewinn beim Angebot neben der Marge. Ohne Angebot (Modus Maximum): Gewinn neben dem Max. Einkaufspreis.
-  // Gleichwertig, Euro; darunter Gewinn je m².
   const headlineZweit = withOffer
-    ? { label: 'Gewinn beim Angebot', value: r.profit, sub: r.profitPerSqm }
+    ? { label: 'Gewinn beim Angebot', value: r.profit, sub: `Marge ${r.margin} · ${r.profitPerSqm}` }
     : { label: 'Gewinn', value: r.profit, sub: r.profitPerSqm };
 
   const result = [];
   if (withOffer) {
     result.push(
-      ['Angebotspreis', r.offer.price],
-      ['Abstand zum Maximum', r.offer.deltaText],
-      ['Max. Einkaufspreis', `${r.maxPrice} · ${r.maxPricePerSqm}`],
-      ['GIK', `${r.gik} · ${r.gikPerSqm}`],
       ['Verkaufspreis', `${r.salePrice} · ${r.salePricePerSqm}`],
-      [r.requiredLabel, `${r.offer.requiredSalePrice} · ${r.offer.requiredSalePricePerSqm}`],
+    );
+    if (kind !== KIND.EN) result.push(['Rendite Käufer', r.buyerYield]);
+    result.push(
+      ['Zielmarge', r.targetMargin],
+      [REQUIRED_SALE_LABEL, `${r.offer.requiredSalePrice} · ${r.offer.requiredSalePricePerSqm}`],
+      ['GIK', `${r.gik} · ${r.gikPerSqm}`],
     );
   } else {
     result.push(

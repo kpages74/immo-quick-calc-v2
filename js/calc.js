@@ -269,8 +269,8 @@ function evaluateWith(c, P) {
   const profit = hasSale ? c.saleNet - totalInvestment : null;
   const marginPercent = hasSale && totalInvestment > 0 ? (profit / totalInvestment) * 100 : null;
   const ampel = trafficLight(marginPercent, c.inputs);
-  // Verkaufspreis inkl. Stellplatz, der für die grüne Schwelle nötig wäre (Zielmarge, mindestens 20 %).
-  const requiredSalePrice = c.v < 1 ? ((1 + c.greenThreshold / 100) * totalInvestment) / (1 - c.v) : null;
+  // Verkaufspreis inkl. Stellplatz, der für die Zielmarge (effectiveMargin) nötig wäre.
+  const requiredSalePrice = c.v < 1 ? ((1 + c.effectiveMargin / 100) * totalInvestment) / (1 - c.v) : null;
 
   return {
     purchasePrice: P,
@@ -293,7 +293,7 @@ function evaluateWith(c, P) {
     purchasePricePerSqm: perSqm(P, c.area),
     totalInvestmentPerSqm: perSqm(totalInvestment, c.area),
     requiredSalePrice: finiteOrNull(requiredSalePrice),
-    // Wie salePricePerSqm (Wohnungsanteil je m²), damit beide m²-Werte vergleichbar sind.
+    // Wie salePricePerSqm (Wohnungsanteil je m²), damit beide m²-Werte vergleichbar sind. Gilt für die Zielmarge.
     requiredSalePricePerSqm: requiredSalePrice === null ? null : flatPerSqm(requiredSalePrice, c.parkingSalePrice, c.area),
   };
 }

@@ -7,7 +7,7 @@ import {
   loadPriceList, savePriceList, clearPriceList as removePriceList,
 } from '../store.js';
 import { setInput, setText, setMode, switchKind, resetGroup } from '../session.js';
-import { presentResult, presentScenarios, fieldHint, fieldLabel, visibleFields, fieldRange } from '../present.js';
+import { presentResult, presentScenarios, fieldHint, fieldLabel, visibleFields, fieldRange, REQUIRED_SALE_LABEL } from '../present.js';
 import { parkingMode, PARKING_MODE } from '../calc.js';
 import { FIELDS, GROUPS, setDefaultOverrides } from '../fields.js';
 import { Fmt, fieldDisplay, parseNumber } from '../format.js';
@@ -523,12 +523,17 @@ function cell(caption, value, sub) {
   return box;
 }
 
-/** Beschriftung mit Ampelpunkt davor. Der Punkt ist für Screenreader verborgen; der Ampelstand steht als aria-label am Container. */
-function ampelCap(caption, r) {
-  const cap = el('span', 'cap');
+/** Ampelpunkt der Ergebniskarte. Für Screenreader verborgen; der Ampelstand steht als aria-label am Container. */
+function ampelDot(r) {
   const dot = el('span', `dot dot-${r.ampel}`);
   dot.setAttribute('aria-hidden', 'true');
-  cap.append(dot, caption);
+  return dot;
+}
+
+/** Beschriftung mit Ampelpunkt davor. */
+function ampelCap(caption, r) {
+  const cap = el('span', 'cap');
+  cap.append(ampelDot(r), caption);
   return cap;
 }
 
@@ -660,28 +665,47 @@ function maxView(r, kind) {
   return [hero, cells];
 }
 
-/** Ansicht „Angebot prüfen“ mit Angebotspreis: Marge und Gewinn beim Angebot nebeneinander (schmal untereinander). */
-function offerView(r) {
+/**
+ * Ansicht „Angebot prüfen“ mit Angebotspreis. Kopf links Angebotspreis, rechts Gewinn beim Angebot (mit Ampel, Marge
+ * und Gewinn je m² darunter). Zellen: Verkaufspreis, Rendite Käufer (bei Eigennutzer leer), Zielmarge, nötiger
+ * Verkaufspreis für die Zielmarge, GIK.
+ */
+function offerView(r, kind) {
   const hero = el('div', 'hero hero-pair');
-  const marge = el('div', 'hero-col');
-  marge.append(ampelCap('Marge beim Angebot', r), el('span', 'hero-fig fit', r.margin));
-  marge.setAttribute('aria-label', `Marge beim Angebot, Ampel ${r.ampelLabel}`);
+  const preis = el('div', 'hero-col');
+  preis.append(
+    el('span', 'cap', 'Angebotspreis'),
+    el('span', 'hero-fig fit', r.offer.price),
+    el('span', 'sub', r.offer.pricePerSqm),
+  );
   const gewinn = el('div', 'hero-col');
-  gewinn.append(el('span', 'cap', 'Gewinn beim Angebot'), el('span', 'hero-fig fit', r.profit), el('span', 'sub', r.profitPerSqm));
-  hero.append(marge, gewinn);
+  const gewinnSub = el('span', 'sub');
+  gewinnSub.append(ampelDot(r), el('span', 'sub-strong', r.margin), ` · ${r.profitPerSqm}`);
+  gewinn.append(el('span', 'cap', 'Gewinn beim Angebot'), el('span', 'hero-fig fit', r.profit), gewinnSub);
+  gewinn.setAttribute('aria-label', `Gewinn beim Angebot, Marge ${r.margin}, Ampel ${r.ampelLabel}`);
+  hero.append(preis, gewinn);
 
   const zielmarge = el('div', 'cell');
   zielmarge.append(el('span', 'cap', 'Zielmarge'), marginPicker());
 
+  // Bei Eigennutzer keine Rendite des Käufers: eine leere Zelle hält die Zeilen an ihrem Platz.
+  let rendite;
+  if (kind === 'en') {
+    rendite = el('div', 'cell');
+    rendite.setAttribute('aria-hidden', 'true');
+  } else {
+    rendite = cell('Rendite Käufer', r.buyerYield);
+  }
+
   const cells = el('div', 'cells');
   cells.append(
-    cell('Max. Einkaufspreis', r.maxPrice, r.maxPricePerSqm),
-    zielmarge,
-    cell('GIK', r.gik, r.gikPerSqm),
     cell('Verkaufspreis', r.salePrice, r.salePricePerSqm),
-    cell(r.requiredLabel, r.offer.requiredSalePrice, r.offer.requiredSalePricePerSqm),
+    rendite,
+    zielmarge,
+    cell(REQUIRED_SALE_LABEL, r.offer.requiredSalePrice, r.offer.requiredSalePricePerSqm),
+    cell('GIK', r.gik, r.gikPerSqm),
   );
-  return [hero, el('p', 'delta', r.offer.deltaText), cells];
+  return [hero, cells];
 }
 
 function renderResult() {
@@ -692,7 +716,9 @@ function renderResult() {
   // Fokus im Zielmarge-Menü (nur die Auswahl) über das Neuzeichnen der Karte hinweg behalten. Das Zahlenfeld
   // „Eigener Wert“ übernimmt beim Verlassen (Enter, Tab, Tippen daneben); dort darf der Fokus nicht zurückspringen.
   const focused = document.activeElement?.dataset?.focusKey ?? '';
-  const nodes = r.mode === 'check' && r.offer ? offerView(r) : maxView(r, session.calc.kind);
+  const nodes = r.mode === 'check' && r.offer
+    ? offerView(r, session.calc.kind)
+    : maxView(r, session.calc.kind);
   body.replaceChildren(...nodes);
   if (focused === 'margin:select') body.querySelector('[data-focus-key="margin:select"]')?.focus();
   renderNotes(r);

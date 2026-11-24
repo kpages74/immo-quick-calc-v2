@@ -352,17 +352,22 @@ export async function buildPdf(report, options = {}) {
 
   /** Zeilen der Spalte 2 bei zweispaltigen Zeilen (52 Zeichen je Zeile). Sonst eine Zeile. */
   const rowLines = (cells) => (cells.length === 2 ? wrapText(cells[1], 52) : ['']);
-  /** Höhe einer Tabellenzeile: 14 pt bis zur ersten Zeile, je Folgezeile 12 pt mehr. */
-  const rowHeight = (cells) => LINE + ROW_LINE * (rowLines(cells).length - 1);
+  /** Zeilen der Beschriftung (Spalte 1) bei zweispaltigen Zeilen: bricht ab 48 Zeichen um, nichts wird abgeschnitten. */
+  const labelLines = (cells) => (cells.length === 2 ? wrapText(cells[0] ?? '', 48) : [clipText(cells[0] ?? '', 48)]);
+  /** Höhe einer Tabellenzeile: 14 pt bis zur ersten Zeile, je Folgezeile 12 pt mehr (längste Spalte zählt). */
+  const rowHeight = (cells) => LINE + ROW_LINE * (Math.max(rowLines(cells).length, labelLines(cells).length) - 1);
   const drawRow = (cells, isHeader) => {
     const size = isHeader ? 8.5 : 9.5;
     const color = isHeader ? GREY_RGB : BLACK_RGB;
-    put(MARGIN_X, y, size, 'F1', color, clipText(cells[0] ?? '', 48));
     if (cells.length === 2) {
+      labelLines(cells).forEach((line, i) => put(MARGIN_X, y - ROW_LINE * i, size, 'F1', color, line));
       rowLines(cells).forEach((line, i) => put(300, y - ROW_LINE * i, size, 'F1', color, line));
-    } else if (cells.length >= 3) {
-      put(300, y, size, 'F1', color, clipText(cells[1], 24));
-      put(440, y, size, 'F1', color, clipText(cells[2], 24));
+    } else {
+      put(MARGIN_X, y, size, 'F1', color, clipText(cells[0] ?? '', 48));
+      if (cells.length >= 3) {
+        put(300, y, size, 'F1', color, clipText(cells[1], 24));
+        put(440, y, size, 'F1', color, clipText(cells[2], 24));
+      }
     }
     y -= rowHeight(cells);
   };
