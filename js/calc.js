@@ -296,7 +296,8 @@ function evaluateWith(c, P) {
     purchasePricePerSqm: perSqm(P, c.area),
     totalInvestmentPerSqm: perSqm(totalInvestment, c.area),
     requiredSalePrice: finiteOrNull(requiredSalePrice),
-    requiredSalePricePerSqm: requiredSalePrice === null ? null : perSqm(requiredSalePrice, c.area),
+    // Wie salePricePerSqm: Wohnungsanteil je m², also ohne Stellplatz-Verkaufspreis (nie unter 0), damit beide m²-Werte vergleichbar sind.
+    requiredSalePricePerSqm: requiredSalePrice === null ? null : perSqm(Math.max(0, requiredSalePrice - c.parkingSalePrice), c.area),
   };
 }
 
