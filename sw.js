@@ -1,7 +1,7 @@
 // Service Worker der Immo Quick-Calc 2.0: Offline-Nutzung. Bei jeder Änderung der Dateien CACHE_NAME erhöhen,
 // Bei jedem Update auch die Versionsnummer in index.html erhöhen (class app-version und class version).
 // damit alte Caches entfernt und die neuen Dateien geladen werden.
-const CACHE_NAME = 'iqc2-v20';
+const CACHE_NAME = 'iqc2-v21';
 
 const ASSETS = [
   './',
@@ -82,6 +82,7 @@ self.addEventListener('activate', (event) => {
 });
 
 // Netzwerk zuerst (Aktualität), bei Fehler der Cache (Offline).
+// cache: 'no-cache' gleicht beim Laden mit dem Server ab, statt bis zu 10 Minuten alte Dateien aus dem HTTP-Cache zu nehmen (GitHub Pages).
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
@@ -89,7 +90,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    fetch(request)
+    fetch(request, { cache: 'no-cache' })
       .then((response) => {
         if (response.ok) {
           const copy = response.clone();

@@ -835,10 +835,28 @@ init();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // Neue Version: Der neue Service Worker übernimmt (skipWaiting, clients.claim), dann einmal neu laden.
+    // Beim allerersten Installieren gab es noch keinen Controller: dann nicht neu laden.
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloading) return;
+      reloading = true;
+      // Offene Eingabe vorher übernehmen (blur löst die Übernahme und das Speichern aus).
+      document.activeElement?.blur?.();
+      location.reload();
+    });
     try {
-      navigator.serviceWorker.register('./sw.js').catch(() => {
-        // Ohne Service Worker funktioniert die App weiterhin online.
-      });
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+        .then((registration) => {
+          // Beim Zurückholen in den Vordergrund nach einer neuen Version fragen (offline: still nichts).
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') registration.update().catch(() => {});
+          });
+        })
+        .catch(() => {
+          // Ohne Service Worker funktioniert die App weiterhin online.
+        });
     } catch {
       // Registrierung nicht möglich: die App läuft ohne Offline-Nutzung weiter.
     }
