@@ -207,10 +207,7 @@ export function fieldHint(session, key) {
     case 'parkingRent': {
       if (r.parkingMode === PARKING_MODE.KEINE) return '';
       // Stellplatzmiete gesamt pro Monat (bei WG × Anzahl Stellplätze). Ohne Betrag ist der Modus unvollständig.
-      const parkingSum = kind === KIND.WG
-        ? (inputs.parkingCount || 0) * (inputs.parkingRent || 0)
-        : (inputs.parkingRent || 0);
-      if (parkingSum <= 0) return 'Bitte Stellplatzmiete eintragen';
+      if (r.parkingRentTotal <= 0) return 'Bitte Stellplatzmiete eintragen';
       if (r.parkingMode === PARKING_MODE.SEPARAT) return 'Kommt zur Kaltmiete dazu · zählt für Verkaufspreis und Rendite des Käufers';
       if (r.parkingCoreMonthly === null) return '';
       const perSqm = inputs.livingArea > 0 ? ` · ${Fmt.perSqm(r.parkingCoreMonthly / inputs.livingArea)}` : '';
@@ -415,8 +412,6 @@ export function presentReport(session, now = new Date()) {
     modeLabel: MODE_LABEL[s.mode],
     headline,
     headlineZweit,
-    ampel: r.ampel,
-    ampelLine: `${r.ampelLabel} · ${r.ampelText}`,
     sections,
     notes: r.notes,
     note: s.calc.note,

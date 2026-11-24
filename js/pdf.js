@@ -24,7 +24,6 @@ const GOLD_RGB = '#FAEEC8';
 const GREY_RGB = '#666666';
 const BLACK_RGB = '#000000';
 const RULE_RGB = '#bfbfbf';
-const AMPEL_RGB = Object.freeze({ gruen: '#2e9e5b', gelb: '#d9a400', rot: '#c8372d' });
 
 const PNG_SIGNATURE = Object.freeze([137, 80, 78, 71, 13, 10, 26, 10]);
 const MAX_PNG_PIXELS = 25000000;
@@ -410,11 +409,7 @@ export async function buildPdf(report, options = {}) {
     if (zweitSub !== '') put(HEADLINE_ZWEIT_X, y, 10, 'F1', GREY_RGB, zweitSub);
     y -= 16;
   }
-  need(22);
-  const ampelColor = Object.hasOwn(AMPEL_RGB, r.ampel) ? AMPEL_RGB[r.ampel] : GREY_RGB;
-  page.push(`${rgbParts(ampelColor)} rg ${MARGIN_X} ${f2(y - 1.5)} 8 8 re f\n`);
-  put(MARGIN_X + 14, y, 10, 'F1', BLACK_RGB, str(r.ampelLine));
-  y -= 24;
+  y -= 8;
 
   // Hinweise
   for (const n of notes) {

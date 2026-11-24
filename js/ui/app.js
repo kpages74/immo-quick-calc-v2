@@ -9,7 +9,7 @@ import {
 import { setInput, setText, setMode, switchKind, resetGroup } from '../session.js';
 import { presentResult, presentScenarios, fieldHint, fieldLabel, visibleFields, fieldRange } from '../present.js';
 import { parkingMode, PARKING_MODE } from '../calc.js';
-import { FIELDS, GROUPS, setDefaultOverrides, clampField } from '../fields.js';
+import { FIELDS, GROUPS, setDefaultOverrides } from '../fields.js';
 import { Fmt, fieldDisplay, parseNumber } from '../format.js';
 import { cleanLibrary } from '../library.js';
 import { cleanPriceList } from '../pricelist.js';
@@ -563,7 +563,7 @@ const MARGIN_PRESETS = Object.freeze([20, 15]);
 /**
  * Zielmarge-Auswahl für die Ergebniskarte: Menü (20 %, 15 %, Eigener Wert). Bei „Eigener Wert“ erscheint ein Zahlenfeld.
  * Übernommen wird über setInput und commit, also denselben Weg wie das Feld „Zielmarge“ unten. Das Zahlenfeld übernimmt
- * erst bei change, blur oder Enter, nicht bei input, damit der Fokus beim Tippen bleibt.
+ * beim Verlassen (blur) oder Enter, nicht bei input, damit der Fokus beim Tippen bleibt.
  */
 function marginPicker() {
   const wrap = el('div', 'margin-pick');
@@ -601,9 +601,8 @@ function marginPicker() {
 
   /** Übernimmt einen Wert über setInput und commit. Gleicher Wert wie bisher: nichts. Liefert true bei Übernahme. */
   const apply = (value) => {
-    const next = clampField('targetMargin', value);
-    if (next === session.calc.inputs.targetMargin) return false;
-    commit(setInput(session, 'targetMargin', next));
+    if (value === session.calc.inputs.targetMargin) return false;
+    commit(setInput(session, 'targetMargin', value));
     return true;
   };
 
@@ -622,10 +621,9 @@ function marginPicker() {
 
   // Ungültige Eingabe oder unveränderter Wert: alter Wert bleibt, die Auswahl zeigt ihn wieder an.
   const finish = () => {
-    const parsed = parseNumber(input.value.trim());
+    const parsed = parseNumber(input.value);
     if (parsed === null || !apply(parsed)) restore();
   };
-  input.addEventListener('change', finish);
   input.addEventListener('blur', finish);
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {

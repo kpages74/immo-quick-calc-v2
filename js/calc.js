@@ -52,6 +52,9 @@ const roundNano = (x) => Math.round(x * 1e9) / 1e9;
 /** Division durch Fläche, null bei Fläche 0 oder ohne endlichen Wert (kein Wert ergibt null, nicht 0). */
 const perSqm = (value, area) => (area > 0 && typeof value === 'number' && Number.isFinite(value) ? finiteOrNull(value / area) : null);
 
+/** Wohnungsanteil je m²: Preis ohne Stellplatz-Verkaufspreis (nie unter 0) ÷ Fläche. */
+const flatPerSqm = (price, parkingSalePrice, area) => perSqm(Math.max(0, price - parkingSalePrice), area);
+
 /** Szenario-Faktor: nur endliche Werte ≥ 0 zählen, sonst 1. */
 const factorOf = (x) => (Number.isFinite(x) && x >= 0 ? x : 1);
 
@@ -159,11 +162,9 @@ function context(kind, inputs, options = {}) {
   const salePrice = candidates.length > 0 ? Math.min(...candidates) : null;
 
   let limit = null;
-  let buffer = null;
   if (yieldLimit !== null && capLimit !== null) {
     if (Math.abs(yieldLimit - capLimit) < 0.005) limit = LIMIT.BOTH;
     else limit = yieldLimit < capLimit ? LIMIT.YIELD : LIMIT.CAP;
-    buffer = Math.abs(yieldLimit - capLimit);
   } else if (yieldLimit !== null) {
     limit = LIMIT.YIELD;
   } else if (capLimit !== null) {
@@ -171,7 +172,7 @@ function context(kind, inputs, options = {}) {
   }
   const capMissing = maxPerSqm === 0;
   // Wohnungsanteil je m²: Verkaufspreis ohne Stellplatz-Verkaufspreis, nie unter 0.
-  const salePricePerSqm = salePrice === null ? null : perSqm(Math.max(0, salePrice - parkingSalePrice), area);
+  const salePricePerSqm = salePrice === null ? null : flatPerSqm(salePrice, parkingSalePrice, area);
   // Rendite Käufer: Jahresmiete inkl. Stellplatzmiete, geteilt durch den Gesamtverkaufspreis inkl. Stellplatz.
   const buyerYield = kind !== KIND.EN && annualRent !== null && salePrice !== null && salePrice > 0
     ? finiteOrNull((annualRent / salePrice) * 100)
@@ -205,9 +206,6 @@ function context(kind, inputs, options = {}) {
     maxPurchasePriceExact = finiteOrNull((saleNet / (1 + m) - renovationTotal - otherCosts - holdingCosts) / (1 + p + phi));
   }
   const maxPurchasePrice = maxPurchasePriceExact === null ? null : Math.floor(maxPurchasePriceExact + 1e-6);
-  const bidRecommendation = maxPurchasePriceExact !== null && maxPurchasePriceExact > 0
-    ? Math.floor((maxPurchasePriceExact + 1e-6) / 1000) * 1000
-    : null;
   const isPurchasePossible = maxPurchasePriceExact !== null && maxPurchasePriceExact > 0;
 
   return {
@@ -225,7 +223,6 @@ function context(kind, inputs, options = {}) {
     salePrice,
     salePricePerSqm,
     limit,
-    buffer,
     capMissing,
     buyerYield,
     knkSumPercent,
@@ -242,6 +239,7 @@ function context(kind, inputs, options = {}) {
     holdingCosts,
     rentalIncome,
     parkingRentMonthly,
+    parkingRentS,
     parkingMode: mode,
     coreIstMonthly,
     salesCommission,
@@ -251,7 +249,6 @@ function context(kind, inputs, options = {}) {
     greenThreshold: greenThreshold(inputs),
     maxPurchasePriceExact,
     maxPurchasePrice,
-    bidRecommendation,
     isPurchasePossible,
   };
 }
@@ -271,7 +268,7 @@ function evaluateWith(c, P) {
   const hasSale = c.saleNet !== null;
   const profit = hasSale ? c.saleNet - totalInvestment : null;
   const marginPercent = hasSale && totalInvestment > 0 ? (profit / totalInvestment) * 100 : null;
-  const ampel = trafficLight(marginPercent, profit, c.inputs);
+  const ampel = trafficLight(marginPercent, c.inputs);
   // Verkaufspreis inkl. Stellplatz, der für die grüne Schwelle nötig wäre (Zielmarge, mindestens 20 %).
   const requiredSalePrice = c.v < 1 ? ((1 + c.greenThreshold / 100) * totalInvestment) / (1 - c.v) : null;
 
@@ -296,8 +293,8 @@ function evaluateWith(c, P) {
     purchasePricePerSqm: perSqm(P, c.area),
     totalInvestmentPerSqm: perSqm(totalInvestment, c.area),
     requiredSalePrice: finiteOrNull(requiredSalePrice),
-    // Wie salePricePerSqm: Wohnungsanteil je m², also ohne Stellplatz-Verkaufspreis (nie unter 0), damit beide m²-Werte vergleichbar sind.
-    requiredSalePricePerSqm: requiredSalePrice === null ? null : perSqm(Math.max(0, requiredSalePrice - c.parkingSalePrice), c.area),
+    // Wie salePricePerSqm (Wohnungsanteil je m²), damit beide m²-Werte vergleichbar sind.
+    requiredSalePricePerSqm: requiredSalePrice === null ? null : flatPerSqm(requiredSalePrice, c.parkingSalePrice, c.area),
   };
 }
 
@@ -325,9 +322,8 @@ function unpricedEvaluation() {
 /**
  * Ampel nach fester Margen-Stufe: grün ab der grünen Schwelle (greenThreshold: Zielmarge, mindestens 20 %),
  * gelb ab 17,5 % bis unter die grüne Schwelle, rot darunter. Ohne berechenbare Marge rot.
- * profit bleibt in der Signatur, wird aber nicht mehr benutzt (kein Mindestgewinn).
  */
-export function trafficLight(marginPercent, profit, inputs) {
+export function trafficLight(marginPercent, inputs) {
   if (typeof marginPercent !== 'number' || !Number.isFinite(marginPercent)) return AMPEL.RED;
   if (marginPercent >= greenThreshold(inputs) - 1e-9) return AMPEL.GREEN;
   if (marginPercent >= YELLOW_MARGIN - 1e-9) return AMPEL.YELLOW;
@@ -376,7 +372,6 @@ export function compute(kind, inputs, options = {}) {
     salePricePerSqm: c.salePricePerSqm,
     parkingSalePrice: c.parkingSalePrice,
     limit: c.limit,
-    buffer: c.buffer,
     capMissing: c.capMissing,
     buyerYield: c.buyerYield,
     knkSumPercent: c.knkSumPercent,
@@ -388,6 +383,7 @@ export function compute(kind, inputs, options = {}) {
     holdingCosts: c.holdingCosts,
     rentalIncome: c.rentalIncome,
     parkingRentAnnual: c.parkingRentMonthly * 12,
+    parkingRentTotal: c.parkingRentS,
     parkingMode: c.parkingMode,
     parkingCoreMonthly: c.coreIstMonthly,
     salesCommission: c.salesCommission,
@@ -397,7 +393,6 @@ export function compute(kind, inputs, options = {}) {
     maxPurchasePriceExact: exact,
     maxPurchasePrice: c.maxPurchasePrice,
     maxPurchasePricePerSqm: perSqm(c.maxPurchasePrice, c.area),
-    bidRecommendation: c.bidRecommendation,
     isPurchasePossible: c.isPurchasePossible,
     ...ev,
     offer,

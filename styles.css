@@ -1118,5 +1118,3 @@ a.btn {
 /* Markierung nach dem Einlesen: gefunden grün, fehlend gelb */
 .q-field input.filled { border-color: var(--green); }
 .q-field input.missing { border-color: var(--yellow); background: rgba(247, 209, 84, 0.12); }
-
-/* Pop-up-Erklärung (z. B. hinter „Rendite-Grenze greift“) */
