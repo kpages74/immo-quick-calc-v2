@@ -1,7 +1,7 @@
 // Fertige Anzeigetexte für die Oberfläche. Rein, keine DOM-Zugriffe.
 // Alle Rechenwerte kommen aus compute/scenarios mit effectiveInputs(session); hier stehen keine eigenen Formeln.
 // Geldbeträge als ganze Euro (Fmt.euro), €/m² und % mit zwei Nachkommastellen (Fmt.perSqm, Fmt.percent).
-import { compute, scenarios, parkingMode, RULE_MARGIN, AMPEL, LIMIT, KIND, PARKING_MODE } from './calc.js';
+import { compute, scenarios, parkingMode, AMPEL, YELLOW_MARGIN, LIMIT, KIND, PARKING_MODE } from './calc.js';
 import { Fmt, fieldDisplay } from './format.js';
 import { FIELD_LIST, FIELDS, GROUPS, fieldsFor, factoryDefaultFor } from './fields.js';
 import { normalizeSession, effectiveInputs } from './session.js';
@@ -18,27 +18,29 @@ export const KIND_LABEL = Object.freeze({
 const NBSP = ' ';
 const DASH = '–';
 const MINUS = '−';
-/** Felder, die nur bei aufgeweichter Marge sichtbar sind. */
-const SOFTENED_ONLY = Object.freeze(['marginFloor', 'minProfit']);
+/**
+ * Felder, die nirgends mehr angezeigt werden (Oberfläche, Bericht, Standardwerte): Marge aufweichen, Untergrenze,
+ * Mindestgewinn. Sie bleiben in FIELDS und in gespeicherten Daten erhalten, wirken aber nicht mehr auf die Ampel.
+ */
+const HIDDEN_FIELDS = Object.freeze(['softened', 'marginFloor', 'minProfit']);
 /** Felder für Stellplatz-Miete, sichtbar bei Stellplatzmiete „Separat“ oder „In Kaltmiete“ (parkingRentMode). */
 const PARKING_RENT_ONLY = Object.freeze(['parkingRent', 'parkingCount']);
 const AMPEL_LABEL = Object.freeze({ [AMPEL.GREEN]: 'Grün', [AMPEL.YELLOW]: 'Gelb', [AMPEL.RED]: 'Rot' });
-const LIMIT_TEXT = Object.freeze({
-  [LIMIT.CAP]: 'm²-Verkaufsgrenze greift',
-  [LIMIT.YIELD]: 'Rendite-Grenze greift',
-  [LIMIT.BOTH]: 'Beide Grenzen gleich',
-});
 
 /** Marge als Text für Anzeige und Berichtszeilen: ganze Zahl ohne Nachkommastelle („20“, „25“), sonst eine („22,5“). */
 function marginText(x) {
   return Fmt.fieldNumber(x, Number.isInteger(x) ? 0 : 1);
 }
 
-/** Kurzer Grund zur Ampel. Grün ab der grünen Marge (Zielmarge, mindestens 20 %). Ohne berechenbare Marge: „Nicht berechenbar“. */
+/**
+ * Kurzer Grund zur Ampel nach Margen-Stufe: grün ab der grünen Schwelle (Zielmarge, mindestens 20 %), gelb ab 17,5 %,
+ * rot darunter. Ohne berechenbare Marge: „Nicht berechenbar“.
+ */
 function ampelText(ampel, margin, threshold) {
+  const yellow = marginText(YELLOW_MARGIN);
   if (ampel === AMPEL.GREEN) return `Marge ab ${marginText(threshold)} %`;
-  if (ampel === AMPEL.YELLOW) return 'Aufgeweicht, Mindestgewinn erreicht';
-  return margin === null ? 'Nicht berechenbar' : 'Marge unter der Regel';
+  if (ampel === AMPEL.YELLOW) return `Marge ab ${yellow} %`;
+  return margin === null ? 'Nicht berechenbar' : `Marge unter ${yellow} %`;
 }
 
 /** Abweichung eines Angebots vom ganzzahligen Maximum. */
@@ -103,20 +105,10 @@ export function presentResult(session) {
   if (r.capMissing && s.calc.kind === KIND.EN) {
     add('Bitte den max. Verkaufspreis je m² eingeben.', capHelp);
   }
-  if (r.softenedActive) {
-    add(`Aufgeweicht: ${Fmt.fieldNumber(r.effectiveMargin, 1)}${NBSP}% statt ${RULE_MARGIN}${NBSP}%`);
-  }
   if (r.salePrice !== null && !r.isPurchasePossible) {
     add('Zu diesen Werten ist kein Ankauf möglich.');
   }
   if (s.mode === 'check' && offer === null) add('Bitte einen Angebotspreis eingeben.');
-
-  let bufferText = '';
-  if (r.buffer !== null && r.limit === LIMIT.CAP) {
-    bufferText = `Puffer ${Fmt.euro(r.buffer)} bis zur Rendite-Grenze`;
-  } else if (r.buffer !== null && r.limit === LIMIT.YIELD) {
-    bufferText = `Puffer ${Fmt.euro(r.buffer)} bis zur m²-Verkaufsgrenze`;
-  }
 
   return {
     mode: s.mode,
@@ -125,7 +117,6 @@ export function presentResult(session) {
     maxPrice: maxOk ? Fmt.euro(r.maxPurchasePrice) : DASH,
     // compute liefert ohne Einkaufspreis 0 statt null (perSqm(null, Fläche)); hier abgefangen.
     maxPricePerSqm: maxOk ? Fmt.perSqm(r.maxPurchasePricePerSqm) : DASH,
-    bid: r.bidRecommendation === null ? '' : `Gebot bis ${Fmt.euro(r.bidRecommendation)}`,
     ampel,
     ampelLabel: AMPEL_LABEL[ampel] ?? DASH,
     ampelText: ampelText(ampel, margin, r.greenThreshold),
@@ -137,10 +128,6 @@ export function presentResult(session) {
     gik: Fmt.euro(basis.totalInvestment),
     gikPerSqm: perSqmOf(basis.totalInvestment),
     buyerYield: Fmt.percent(r.buyerYield),
-    limitText: Object.hasOwn(LIMIT_TEXT, r.limit) ? LIMIT_TEXT[r.limit] : '',
-    bufferText,
-    // Erklärung zur Grenze (Rendite-Grenze / m²-Verkaufsgrenze), als „?“ hinter limitText.
-    limitHelp: Object.hasOwn(LIMIT_TEXT, r.limit) && LIMIT_TEXT[r.limit] ? capHelp : '',
     notes,
     noteHelp,
     offer: useOffer
@@ -311,21 +298,21 @@ export function presentObjectRow(calc) {
 export function visibleFields(session) {
   const s = normalizeSession(session);
   const kind = s.calc.kind;
-  const softened = s.calc.inputs.softened === true;
   const parkingShown = parkingMode(s.calc.inputs) !== PARKING_MODE.KEINE;
   return FIELD_LIST.filter((f) => f.kinds.includes(kind)
-    && !(SOFTENED_ONLY.includes(f.key) && !softened)
+    && !HIDDEN_FIELDS.includes(f.key)
     && !(PARKING_RENT_ONLY.includes(f.key) && !parkingShown)
     && !(f.key === 'offerPrice' && s.mode !== 'check'));
 }
 
-/** Regler-Bereich { min, max, step }. targetMargin hat min 20, solange softened nicht true ist. Unbekannter Schlüssel: null. */
+/**
+ * Regler-Bereich { min, max, step } aus der Feldspezifikation. Die Zielmarge reicht von 0 bis 100 (ohne Untergrenze 20).
+ * Unbekannter Schlüssel: null. Der Sitzungs-Parameter bleibt für die Aufrufer gleich.
+ */
 export function fieldRange(session, key) {
   if (!Object.hasOwn(FIELDS, key)) return null;
   const f = FIELDS[key];
-  const softened = normalizeSession(session).calc.inputs.softened === true;
-  const min = key === 'targetMargin' && !softened ? RULE_MARGIN : f.min;
-  return { min, max: f.max, step: f.step };
+  return { min: f.min, max: f.max, step: f.step };
 }
 
 // MARK: - Bericht (PDF und Druck)
@@ -338,12 +325,6 @@ function reportFieldValue(field, value) {
   if (field.unit === 'bool') return value === true ? 'Ja' : 'Nein';
   if (value === null || value === undefined) return DASH;
   return fieldDisplay(FIELDS[field.key], value);
-}
-
-/** Grenztext für die Ergebniszeile „Grenze“: Grenze und Puffer mit ' · ' verbunden, leere Teile entfallen. */
-function limitRow(r) {
-  const text = [r.limitText, r.bufferText].filter(Boolean).join(' · ');
-  return text === '' ? null : ['Grenze', text];
 }
 
 /**
@@ -364,7 +345,7 @@ export function presentReport(session, now = new Date()) {
     : {
       label: 'Max. Einkaufspreis',
       value: r.maxPrice,
-      sub: [r.maxPricePerSqm, r.bid].filter(Boolean).join(' · '),
+      sub: r.maxPricePerSqm,
     };
 
   // Mit Angebot: Gewinn beim Angebot neben der Marge. Ohne Angebot (Modus Maximum): Gewinn neben dem Max. Einkaufspreis.
@@ -391,8 +372,6 @@ export function presentReport(session, now = new Date()) {
     );
     if (kind !== KIND.EN) result.push(['Rendite Käufer', r.buyerYield]);
   }
-  const limit = limitRow(r);
-  if (limit) result.push(limit);
 
   const sections = [{ title: 'Ergebnis', rows: result }];
 
@@ -459,6 +438,7 @@ export function presentDefaults(overrides, kind) {
   const parkingShown = parkingMode(entries) !== PARKING_MODE.KEINE;
   return FIELD_LIST
     .filter((f) => f.key !== 'offerPrice' && f.kinds.includes(kind) && Object.hasOwn(entries, f.key))
+    .filter((f) => !HIDDEN_FIELDS.includes(f.key))
     .filter((f) => !(PARKING_RENT_ONLY.includes(f.key) && !parkingShown))
     .map((f) => ({
       key: f.key,

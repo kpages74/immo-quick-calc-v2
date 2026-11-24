@@ -5,8 +5,10 @@
 export const KIND = Object.freeze({ VERMIETET: 'vermietet', KAP: 'kap', EN: 'en', WG: 'wg' });
 export const AMPEL = Object.freeze({ GREEN: 'gruen', YELLOW: 'gelb', RED: 'rot' });
 export const LIMIT = Object.freeze({ YIELD: 'rendite', CAP: 'deckel', BOTH: 'beide' });
-/** Regelmarge in Prozent: ohne „aufweichen“ wird die Zielmarge auf mindestens diesen Wert angehoben. */
+/** Regelmarge in Prozent: Grün-Schwelle, wenn die Zielmarge darunter liegt (greenThreshold). */
 export const RULE_MARGIN = 20;
+/** Gelb-Schwelle in Prozent: Marge ab diesem Wert ist gelb (bis zur grünen Schwelle), darunter rot. */
+export const YELLOW_MARGIN = 17.5;
 
 /** Stellplatz-/Garagenmiete: keine Miete, separat vermietet (kommt zur Kaltmiete dazu) oder in der Kaltmiete enthalten. */
 export const PARKING_MODE = Object.freeze({ KEINE: 'keine', SEPARAT: 'separat', INKL: 'inkl' });
@@ -28,8 +30,8 @@ export function parkingMode(inputs) {
 }
 
 /**
- * Grüne Marge in Prozent: die Zielmarge, mindestens die Regelmarge (20 %). Ohne targetMargin in den Eingaben gilt 20.
- * Bestimmt die grüne Ampel, den nötigen Verkaufspreis und (ohne aufweichen) den Max. Einkaufspreis.
+ * Grüne Schwelle in Prozent: die Zielmarge, mindestens die Regelmarge (20 %). Ohne targetMargin in den Eingaben gilt 20.
+ * Bestimmt die grüne Ampel und den nötigen Verkaufspreis. Der Max. Einkaufspreis rechnet dagegen mit der Zielmarge selbst.
  */
 export function greenThreshold(inputs) {
   return Math.max(RULE_MARGIN, read(inputs, 'targetMargin'));
@@ -193,11 +195,8 @@ function context(kind, inputs, options = {}) {
   const salesCommission = salePrice === null ? null : salePrice * v;
   const saleNet = salePrice === null ? null : salePrice * (1 - v);
 
-  // Schritt 4: Marge
-  const targetMargin = read(inputs, 'targetMargin');
-  const softened = inputs?.softened === true;
-  const softenedActive = softened && targetMargin < RULE_MARGIN;
-  const effectiveMargin = softened ? targetMargin : Math.max(targetMargin, RULE_MARGIN);
+  // Schritt 4: Marge. Die Zielmarge wirkt immer direkt (auch unter 20 %).
+  const effectiveMargin = read(inputs, 'targetMargin');
   const m = effectiveMargin / 100;
 
   // Maximaler Einkaufspreis (inkl. Stellplatz): saleNet = (1 + m) × GIK mit GIK = EK (1 + p + φ) + S + O + H
@@ -249,7 +248,6 @@ function context(kind, inputs, options = {}) {
     saleNet,
     v,
     effectiveMargin,
-    softenedActive,
     greenThreshold: greenThreshold(inputs),
     maxPurchasePriceExact,
     maxPurchasePrice,
@@ -274,7 +272,7 @@ function evaluateWith(c, P) {
   const profit = hasSale ? c.saleNet - totalInvestment : null;
   const marginPercent = hasSale && totalInvestment > 0 ? (profit / totalInvestment) * 100 : null;
   const ampel = trafficLight(marginPercent, profit, c.inputs);
-  // Verkaufspreis inkl. Stellplatz, der für die grüne Marge nötig wäre (Zielmarge, mindestens 20 %).
+  // Verkaufspreis inkl. Stellplatz, der für die grüne Schwelle nötig wäre (Zielmarge, mindestens 20 %).
   const requiredSalePrice = c.v < 1 ? ((1 + c.greenThreshold / 100) * totalInvestment) / (1 - c.v) : null;
 
   return {
@@ -324,20 +322,14 @@ function unpricedEvaluation() {
 }
 
 /**
- * Ampel: grün ab der grünen Marge (greenThreshold: Zielmarge, mindestens 20 %); gelb nur bei aufgeweichter Marge
- * (ab Untergrenze und Mindestgewinn) und nur, wenn nicht grün; sonst rot.
+ * Ampel nach fester Margen-Stufe: grün ab der grünen Schwelle (greenThreshold: Zielmarge, mindestens 20 %),
+ * gelb ab 17,5 % bis unter die grüne Schwelle, rot darunter. Ohne berechenbare Marge rot.
+ * profit bleibt in der Signatur, wird aber nicht mehr benutzt (kein Mindestgewinn).
  */
 export function trafficLight(marginPercent, profit, inputs) {
   if (typeof marginPercent !== 'number' || !Number.isFinite(marginPercent)) return AMPEL.RED;
   if (marginPercent >= greenThreshold(inputs) - 1e-9) return AMPEL.GREEN;
-  if (
-    inputs?.softened === true
-    && marginPercent >= read(inputs, 'marginFloor') - 1e-9
-    && typeof profit === 'number'
-    && profit >= read(inputs, 'minProfit') - 1e-6
-  ) {
-    return AMPEL.YELLOW;
-  }
+  if (marginPercent >= YELLOW_MARGIN - 1e-9) return AMPEL.YELLOW;
   return AMPEL.RED;
 }
 
@@ -400,7 +392,6 @@ export function compute(kind, inputs, options = {}) {
     salesCommission: c.salesCommission,
     saleNet: c.saleNet,
     effectiveMargin: c.effectiveMargin,
-    softenedActive: c.softenedActive,
     greenThreshold: c.greenThreshold,
     maxPurchasePriceExact: exact,
     maxPurchasePrice: c.maxPurchasePrice,

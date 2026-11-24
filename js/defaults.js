@@ -1,7 +1,7 @@
 // Eigene Standardwerte je Nutzungsart (Etappe 4). Rein: kein DOM, kein Speicher.
 // Form: { [art]: { [feld]: wert } }. Gespeichert wird nur, was vom Werksstandard abweicht.
 import { fieldsFor, factoryDefaultFor, clampField } from './fields.js';
-import { RULE_MARGIN, parkingMode } from './calc.js';
+import { parkingMode } from './calc.js';
 import { KINDS } from './model.js';
 
 const isPlainObject = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
@@ -16,8 +16,7 @@ function cleanValue(field, value) {
 
 /**
  * Säubert beliebige Standardwerte: nur gültige Arten und Felder der Art, offerPrice nie, Typen geprüft,
- * Zahlen begrenzt. Werte gleich dem Werksstandard fallen weg, leere Arten ebenso. Margenregel: ohne
- * aufgeweichte Marge wird targetMargin unter RULE_MARGIN auf RULE_MARGIN gesetzt. Wirft nie, ändert die Eingabe nicht.
+ * Zahlen begrenzt. Werte gleich dem Werksstandard fallen weg, leere Arten ebenso. Wirft nie, ändert die Eingabe nicht.
  */
 export function cleanDefaults(raw) {
   try {
@@ -37,9 +36,6 @@ export function cleanDefaults(raw) {
         const value = cleanValue(field, entries[field.key]);
         if (value !== undefined) clean[field.key] = value;
       }
-      const softened = Object.hasOwn(clean, 'softened') ? clean.softened : factoryDefaultFor('softened', kind);
-      const margin = Object.hasOwn(clean, 'targetMargin') ? clean.targetMargin : factoryDefaultFor('targetMargin', kind);
-      if (softened !== true && margin < RULE_MARGIN) clean.targetMargin = RULE_MARGIN;
       for (const key of Object.keys(clean)) {
         if (clean[key] === factoryDefaultFor(key, kind)) delete clean[key];
       }

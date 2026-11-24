@@ -4,7 +4,6 @@
 // Alle Exporte geben eine NEUE Sitzung zurück, verändern die Eingabe nicht und werfen nicht.
 import { KINDS, createCalculation, normalizeCalculation, changeKind } from './model.js';
 import { FIELD_LIST, GROUPS, fieldsFor, defaultFor, clampField } from './fields.js';
-import { RULE_MARGIN } from './calc.js';
 
 const MODES = Object.freeze(['max', 'check']);
 const DEFAULT_KIND = 'kap';
@@ -65,7 +64,7 @@ export function normalizeSession(raw) {
 /**
  * Setzt ein Feld der aktuellen Art. Unbekannter Schlüssel oder Feld einer fremden Art: unverändert.
  * Zahlen werden auf den Bereich begrenzt; nicht endliche Werte werden ignoriert.
- * Margenregel: ist softened false, wird targetMargin unter 20 auf 20 angehoben.
+ * Die Zielmarge wird unverändert übernommen (auch unter 20 %).
  */
 export function setInput(session, key, value) {
   const base = normalizeSession(session);
@@ -76,10 +75,6 @@ export function setInput(session, key, value) {
 
   const inputs = { ...base.calc.inputs, [key]: cleaned };
   const carry = { ...base.carry, [key]: cleaned };
-  if ((key === 'softened' || key === 'targetMargin') && inputs.softened === false && inputs.targetMargin < RULE_MARGIN) {
-    inputs.targetMargin = RULE_MARGIN;
-    carry.targetMargin = RULE_MARGIN;
-  }
   return { calc: { ...base.calc, inputs, modified: nowIso() }, carry, mode: base.mode };
 }
 

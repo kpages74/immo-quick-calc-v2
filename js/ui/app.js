@@ -9,7 +9,7 @@ import {
 import { setInput, setText, setMode, switchKind, resetGroup } from '../session.js';
 import { presentResult, presentScenarios, fieldHint, fieldLabel, visibleFields, fieldRange } from '../present.js';
 import { parkingMode, PARKING_MODE } from '../calc.js';
-import { FIELDS, GROUPS, setDefaultOverrides } from '../fields.js';
+import { FIELDS, GROUPS, setDefaultOverrides, clampField } from '../fields.js';
 import { Fmt, fieldDisplay, parseNumber } from '../format.js';
 import { cleanLibrary } from '../library.js';
 import { cleanPriceList } from '../pricelist.js';
@@ -124,7 +124,7 @@ function displayOf(key, value) {
 /** Schlüssel, bei dessen Änderung sich die Menge der sichtbaren Felder ändert: nur dann wird das Formular neu aufgebaut. */
 // Erlaubt einen Zeilenumbruch nach dem Schrägstrich (unsichtbares Trennzeichen), damit schmale Bildschirme nicht mitten im Wort trennen.
 const breakable = (text) => String(text).replace(/\//g, "/\u200b");
-const formKeyOf = (s) => `${s.calc.kind}|${s.mode}|${s.calc.inputs.softened === true}|${parkingMode(s.calc.inputs) !== PARKING_MODE.KEINE}`;
+const formKeyOf = (s) => `${s.calc.kind}|${s.mode}|${parkingMode(s.calc.inputs) !== PARKING_MODE.KEINE}`;
 
 // MARK: - Zahlenfeld, Schalter, Textfeld
 
@@ -516,14 +516,6 @@ function renderScenarios() {
 
 // MARK: - Ergebniskarte
 
-function verdict(r) {
-  const box = el('div', 'verdict');
-  const dot = el('span', `dot dot-${r.ampel}`);
-  dot.setAttribute('aria-hidden', 'true');
-  box.append(dot, el('span', 'verdict-text', `${r.ampelLabel} · ${r.ampelText}`));
-  return box;
-}
-
 function cell(caption, value, sub) {
   const box = el('div', 'cell');
   box.append(el('span', 'cap', caption), el('span', 'fig fit', value));
@@ -531,46 +523,13 @@ function cell(caption, value, sub) {
   return box;
 }
 
-function limitLine(r) {
-  const text = [r.limitText, r.bufferText].filter(Boolean).join(' · ');
-  if (!text) return null;
-  const line = el('p', 'limit', text);
-  if (!r.limitHelp) return line;
-  // Nur das „?“ hinter der Zeile; die Erklärung erscheint beim Antippen als Pop-up über der Seite.
-  const button = el('button', 'help-btn');
-  button.type = 'button';
-  button.setAttribute('aria-label', 'Erklärung: Rendite-Grenze und m²-Verkaufsgrenze');
-  button.setAttribute('aria-haspopup', 'dialog');
-  button.addEventListener('click', () => showHelpPopup('Rendite-Grenze und m²-Verkaufsgrenze', r.limitHelp));
-  line.append(' ', button);
-  return line;
-}
-
-/** Pop-up mit Erklärtext. Schließt über den Knopf, Escape oder Tippen neben das Fenster. */
-function showHelpPopup(title, text) {
-  let dlg = document.getElementById('dlg-help');
-  if (!dlg) {
-    dlg = el('dialog', 'help-dialog');
-    dlg.id = 'dlg-help';
-    dlg.setAttribute('aria-labelledby', 'help-title');
-    const head = el('h2', 'dlg-title');
-    head.id = 'help-title';
-    const body = el('p', 'help-dialog-text');
-    const actions = el('div', 'dlg-actions');
-    const close = el('button', 'btn', 'Schließen');
-    close.type = 'button';
-    close.addEventListener('click', () => dlg.close());
-    actions.append(close);
-    dlg.append(head, body, actions);
-    dlg.addEventListener('click', (event) => {
-      if (event.target === dlg) dlg.close(); // Tippen auf den Hintergrund
-    });
-    document.body.append(dlg);
-  }
-  dlg.querySelector('#help-title').textContent = title;
-  dlg.querySelector('.help-dialog-text').textContent = text;
-  if (typeof dlg.showModal === 'function') dlg.showModal();
-  else dlg.setAttribute('open', '');
+/** Beschriftung mit Ampelpunkt davor. Der Punkt ist für Screenreader verborgen; der Ampelstand steht als aria-label am Container. */
+function ampelCap(caption, r) {
+  const cap = el('span', 'cap');
+  const dot = el('span', `dot dot-${r.ampel}`);
+  dot.setAttribute('aria-hidden', 'true');
+  cap.append(dot, caption);
+  return cap;
 }
 
 /** Hinweise stehen außerhalb der Karte, in #result-notes. */
@@ -596,47 +555,135 @@ function renderNotes(r) {
   box.hidden = false;
 }
 
+// MARK: - Zielmarge-Auswahl (Ergebniskarte)
+
+/** Feste Auswahl der Zielmarge in Prozent. Die Auswahl „custom“ steht für „Eigener Wert“ mit Zahlenfeld. */
+const MARGIN_PRESETS = Object.freeze([20, 15]);
+
+/**
+ * Zielmarge-Auswahl für die Ergebniskarte: Menü (20 %, 15 %, Eigener Wert). Bei „Eigener Wert“ erscheint ein Zahlenfeld.
+ * Übernommen wird über setInput und commit, also denselben Weg wie das Feld „Zielmarge“ unten. Das Zahlenfeld übernimmt
+ * erst bei change, blur oder Enter, nicht bei input, damit der Fokus beim Tippen bleibt.
+ */
+function marginPicker() {
+  const wrap = el('div', 'margin-pick');
+
+  const select = el('select', 'margin-select');
+  select.dataset.focusKey = 'margin:select';
+  select.setAttribute('aria-label', 'Zielmarge');
+  for (const [value, text] of [['20', '20 %'], ['15', '15 %'], ['custom', 'Eigener Wert']]) {
+    const option = el('option', null, text);
+    option.value = value;
+    select.append(option);
+  }
+
+  const input = el('input', 'margin-custom');
+  input.type = 'text';
+  input.inputMode = 'decimal';
+  input.enterKeyHint = 'done';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.dataset.focusKey = 'margin:custom';
+  input.setAttribute('aria-label', 'Eigene Zielmarge in Prozent');
+  const unit = el('span', 'margin-unit', '%');
+  wrap.append(select, input, unit);
+
+  /** Zeigt Auswahl und Zahlenfeld zum aktuellen Wert der Zielmarge. */
+  const restore = () => {
+    const current = session.calc.inputs.targetMargin;
+    const preset = MARGIN_PRESETS.includes(current);
+    select.value = preset ? String(current) : 'custom';
+    input.hidden = preset;
+    unit.hidden = preset;
+    input.value = Fmt.editingNumber(current);
+  };
+  restore();
+
+  /** Übernimmt einen Wert über setInput und commit. Gleicher Wert wie bisher: nichts. Liefert true bei Übernahme. */
+  const apply = (value) => {
+    const next = clampField('targetMargin', value);
+    if (next === session.calc.inputs.targetMargin) return false;
+    commit(setInput(session, 'targetMargin', next));
+    return true;
+  };
+
+  select.addEventListener('change', () => {
+    if (select.value === 'custom') {
+      // Nur das Zahlenfeld öffnen; der Wert wird erst mit dem Zahlenfeld übernommen.
+      input.hidden = false;
+      unit.hidden = false;
+      input.value = Fmt.editingNumber(session.calc.inputs.targetMargin);
+      input.focus();
+      input.select();
+      return;
+    }
+    apply(Number(select.value));
+  });
+
+  // Ungültige Eingabe oder unveränderter Wert: alter Wert bleibt, die Auswahl zeigt ihn wieder an.
+  const finish = () => {
+    const parsed = parseNumber(input.value.trim());
+    if (parsed === null || !apply(parsed)) restore();
+  };
+  input.addEventListener('change', finish);
+  input.addEventListener('blur', finish);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      input.blur();
+    }
+  });
+
+  return wrap;
+}
+
 /** Ansicht „Maximum ermitteln“ (auch Modus Angebot ohne Angebotspreis): Max. Einkaufspreis und Gewinn nebeneinander (schmal untereinander). */
 function maxView(r, kind) {
   const hero = el('div', 'hero hero-pair');
   const maximum = el('div', 'hero-col');
-  // Eine Zeile: €/m² und Gebot, das Gebot nur bei vorhandenem Wert.
   maximum.append(
     el('span', 'cap', 'Max. Einkaufspreis'),
     el('span', 'hero-fig fit', r.maxPrice),
-    el('span', 'sub', [r.maxPricePerSqm, r.bid].filter(Boolean).join(' · ')),
+    el('span', 'sub', r.maxPricePerSqm),
   );
   const gewinn = el('div', 'hero-col');
   gewinn.append(el('span', 'cap', 'Gewinn'), el('span', 'hero-fig fit', r.profit), el('span', 'sub', r.profitPerSqm));
   hero.append(maximum, gewinn);
 
+  // Am Maximum ist die Marge gleich der Zielmarge: die Zelle zeigt deshalb das Menü statt der Zahl.
+  const marge = el('div', 'cell');
+  marge.append(ampelCap('Marge', r), marginPicker());
+  marge.setAttribute('aria-label', `Marge, Ampel ${r.ampelLabel}`);
+
   const cells = el('div', 'cells');
-  cells.append(
-    cell('Marge', r.margin),
-    cell('Verkaufspreis', r.salePrice, r.salePricePerSqm),
-    cell('GIK', r.gik, r.gikPerSqm),
-  );
+  cells.append(cell('Verkaufspreis', r.salePrice, r.salePricePerSqm));
   if (kind !== 'en') cells.append(cell('Rendite Käufer', r.buyerYield));
-  return [hero, verdict(r), cells, limitLine(r)].filter(Boolean);
+  cells.append(marge, cell('GIK', r.gik, r.gikPerSqm));
+  return [hero, cells];
 }
 
 /** Ansicht „Angebot prüfen“ mit Angebotspreis: Marge und Gewinn beim Angebot nebeneinander (schmal untereinander). */
 function offerView(r) {
   const hero = el('div', 'hero hero-pair');
   const marge = el('div', 'hero-col');
-  marge.append(el('span', 'cap', 'Marge beim Angebot'), el('span', 'hero-fig fit', r.margin));
+  marge.append(ampelCap('Marge beim Angebot', r), el('span', 'hero-fig fit', r.margin));
+  marge.setAttribute('aria-label', `Marge beim Angebot, Ampel ${r.ampelLabel}`);
   const gewinn = el('div', 'hero-col');
   gewinn.append(el('span', 'cap', 'Gewinn beim Angebot'), el('span', 'hero-fig fit', r.profit), el('span', 'sub', r.profitPerSqm));
   hero.append(marge, gewinn);
 
+  const zielmarge = el('div', 'cell');
+  zielmarge.append(el('span', 'cap', 'Zielmarge'), marginPicker());
+
   const cells = el('div', 'cells');
   cells.append(
     cell('Max. Einkaufspreis', r.maxPrice, r.maxPricePerSqm),
+    zielmarge,
     cell('GIK', r.gik, r.gikPerSqm),
     cell('Verkaufspreis', r.salePrice, r.salePricePerSqm),
     cell(r.requiredLabel, r.offer.requiredSalePrice, r.offer.requiredSalePricePerSqm),
   );
-  return [hero, verdict(r), el('p', 'delta', r.offer.deltaText), cells, limitLine(r)].filter(Boolean);
+  return [hero, el('p', 'delta', r.offer.deltaText), cells];
 }
 
 function renderResult() {
@@ -644,8 +691,11 @@ function renderResult() {
   const card = $('result');
   card.dataset.ampel = r.ampel;
   const body = $('result-body');
+  // Fokus im Zielmarge-Menü über das Neuzeichnen der Karte hinweg behalten.
+  const focused = document.activeElement?.dataset?.focusKey ?? '';
   const nodes = r.mode === 'check' && r.offer ? offerView(r) : maxView(r, session.calc.kind);
   body.replaceChildren(...nodes);
+  if (focused.startsWith('margin:')) body.querySelector(`[data-focus-key="${focused}"]`)?.focus();
   renderNotes(r);
 }
 

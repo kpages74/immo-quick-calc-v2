@@ -138,7 +138,6 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 }
 
 .notes-item .help-btn { display: inline-block; vertical-align: middle; margin: -10px -10px -10px 4px; }
-.limit .help-btn { display: inline-block; vertical-align: middle; margin: -12px -10px -10px 0; }
 
 /* Umschalter (Kapsel) */
 .controls { display: block; }
@@ -246,17 +245,6 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 
 .hero .sub { font-size: 14px; line-height: 1.3; color: var(--secondary); }
 
-.verdict {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 6px 0 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.verdict-text { min-width: 0; }
-
 .dot {
   flex: none;
   width: 12px;
@@ -268,6 +256,9 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .dot-gruen { background: var(--green); }
 .dot-gelb { background: var(--yellow); }
 .dot-rot { background: var(--red); }
+
+/* Ampelpunkt vor der Beschriftung „Marge“ (Ergebniskarte), mittig zur Schrift */
+.cap .dot { display: inline-block; vertical-align: middle; margin-right: 6px; }
 
 .cells {
   display: grid;
@@ -292,9 +283,56 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 
 .cell .sub { font-size: 13px; line-height: 1.3; color: var(--secondary); white-space: nowrap; overflow: hidden; }
 
-.delta { margin: 8px 0 0; font-size: 15px; font-weight: 600; }
+/* Zielmarge-Auswahl in der Ergebniskarte: Menü, bei „Eigener Wert“ ein schmales Zahlenfeld mit %. */
+.margin-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 
-.limit { margin: 8px 0 0; font-size: 13px; color: var(--secondary); }
+.margin-select {
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 36px;
+  max-width: 100%;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--field-border);
+  border-radius: 10px;
+  background-color: var(--seg-bg);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--secondary) 50%),
+    linear-gradient(135deg, var(--secondary) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  outline: none;
+}
+
+.margin-select:focus { border-color: var(--accent); }
+.margin-select option { background: var(--card); color: var(--text); }
+
+.margin-custom {
+  width: 4.5em;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--field-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.margin-custom:focus { border-color: var(--accent); }
+
+.margin-unit { font-size: 16px; font-weight: 600; color: var(--text); }
+
+.delta { margin: 8px 0 0; font-size: 15px; font-weight: 600; }
 
 /* Hinweise unter der Karte, scrollen mit der Seite */
 .notes-box {
@@ -1082,4 +1120,3 @@ a.btn {
 .q-field input.missing { border-color: var(--yellow); background: rgba(247, 209, 84, 0.12); }
 
 /* Pop-up-Erklärung (z. B. hinter „Rendite-Grenze greift“) */
-.help-dialog-text { margin: 0 0 4px; font-size: 14px; line-height: 1.5; color: var(--text); }

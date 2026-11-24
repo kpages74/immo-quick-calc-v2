@@ -25,7 +25,7 @@ const RAW_FIELDS = [
   { key: 'transferTaxPercent', label: 'Grunderwerbsteuer', unit: 'percent', group: 'kosten', kinds: ALL_KINDS, min: 0, max: 10, step: 0.1, digits: 2, default: 5.5 },
   { key: 'notaryPercent', label: 'Notar und Grundbuch', unit: 'percent', group: 'kosten', kinds: ALL_KINDS, min: 0, max: 5, step: 0.01, digits: 2, default: 1.5 },
   { key: 'salesCommissionPercent', label: 'Vertriebskosten', unit: 'percent', group: 'kosten', kinds: ALL_KINDS, min: 0, max: 20, step: 0.5, digits: 1, default: 0 },
-  { key: 'targetMargin', label: 'Zielmarge', unit: 'percent', group: 'marge', kinds: ALL_KINDS, min: 0, max: 100, step: 0.5, digits: 1, default: 20 },
+  { key: 'targetMargin', label: 'Zielmarge', help: 'Marge, mit der der Max. Einkaufspreis gerechnet wird. Ampel: grün ab 20 % (liegt die Zielmarge darüber, ab der Zielmarge), gelb ab 17,5 %, rot darunter.', unit: 'percent', group: 'marge', kinds: ALL_KINDS, min: 0, max: 100, step: 0.5, digits: 1, default: 20 },
   { key: 'softened', label: 'Marge aufweichen', unit: 'bool', group: 'marge', kinds: ALL_KINDS, min: 0, max: 1, step: 1, digits: 0, default: false },
   { key: 'marginFloor', label: 'Untergrenze Marge', unit: 'percent', group: 'marge', kinds: ALL_KINDS, min: 0, max: 20, step: 0.5, digits: 1, default: 17.5 },
   { key: 'minProfit', label: 'Mindestgewinn', unit: 'euro', group: 'marge', kinds: ALL_KINDS, min: 0, max: 200000, step: 1000, digits: 0, default: 20000 },
