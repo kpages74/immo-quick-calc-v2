@@ -691,11 +691,12 @@ function renderResult() {
   const card = $('result');
   card.dataset.ampel = r.ampel;
   const body = $('result-body');
-  // Fokus im Zielmarge-Menü über das Neuzeichnen der Karte hinweg behalten.
+  // Fokus im Zielmarge-Menü (nur die Auswahl) über das Neuzeichnen der Karte hinweg behalten. Das Zahlenfeld
+  // „Eigener Wert“ übernimmt beim Verlassen (Enter, Tab, Tippen daneben); dort darf der Fokus nicht zurückspringen.
   const focused = document.activeElement?.dataset?.focusKey ?? '';
   const nodes = r.mode === 'check' && r.offer ? offerView(r) : maxView(r, session.calc.kind);
   body.replaceChildren(...nodes);
-  if (focused.startsWith('margin:')) body.querySelector(`[data-focus-key="${focused}"]`)?.focus();
+  if (focused === 'margin:select') body.querySelector('[data-focus-key="margin:select"]')?.focus();
   renderNotes(r);
 }
 
