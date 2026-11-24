@@ -1,5 +1,6 @@
 // Rechenlogik der Immo Quick-Calc Web-App (Etappe 2). Einzige Quelle aller Formeln.
 // Keine DOM-Zugriffe. Prozentwerte als Prozentzahl (20 = 20 %). Ergebnis null = nicht berechenbar.
+// Wohnung und Stellplatz werden als Paket gerechnet: Max. Einkaufspreis, Verkaufspreis und Angebot gelten inkl. Stellplatz.
 
 export const KIND = Object.freeze({ VERMIETET: 'vermietet', KAP: 'kap', EN: 'en', WG: 'wg' });
 export const AMPEL = Object.freeze({ GREEN: 'gruen', YELLOW: 'gelb', RED: 'rot' });
@@ -24,6 +25,14 @@ export function parkingMode(inputs) {
     return PARKING_MODE_VALUES.includes(src.parkingRentMode) ? src.parkingRentMode : PARKING_MODE.KEINE;
   }
   return src.parkingRentSeparate === true ? PARKING_MODE.SEPARAT : PARKING_MODE.KEINE;
+}
+
+/**
+ * Grüne Marge in Prozent: die Zielmarge, mindestens die Regelmarge (20 %). Ohne targetMargin in den Eingaben gilt 20.
+ * Bestimmt die grüne Ampel, den nötigen Verkaufspreis und (ohne aufweichen) den Max. Einkaufspreis.
+ */
+export function greenThreshold(inputs) {
+  return Math.max(RULE_MARGIN, read(inputs, 'targetMargin'));
 }
 
 /** Eingabe lesen: fehlend, nicht endlich, nicht Zahl oder negativ → 0. */
@@ -51,6 +60,9 @@ function assertKind(kind) {
 /**
  * Zwischenwerte einer Berechnung: Miete, Grenzen, Verkaufspreis, Kosten und Marge.
  * Gemeinsame Grundlage für compute, evaluatePurchase und scenarios.
+ * Das Paket aus Wohnung und Stellplatz: Die Miete für die Rendite-Grenze enthält die Stellplatzmiete (bei 'inkl'
+ * und 'separat'), die m²-Verkaufsgrenze enthält den Verkaufspreis des Stellplatzes. salePrice ist damit der
+ * Gesamtverkaufspreis inkl. Stellplatz.
  * options (intern, für Szenarien): rentFactor multipliziert alle Mietwerte außer rentalIncome,
  * renovationFactor multipliziert die Sanierungskosten.
  */
@@ -80,7 +92,6 @@ function context(kind, inputs, options = {}) {
   let targetRentPerSqm = null;
   let currentRentPerSqm = null;
   let monthlyRent = null;
-  let coreAnnualRent = null; // Kern-Jahresmiete ohne Stellplatz, Grundlage der Rendite-Grenze
   let rentalIncome = 0;
   if (kind === KIND.VERMIETET) {
     const rent = read(inputs, 'rent');
@@ -93,7 +104,6 @@ function context(kind, inputs, options = {}) {
       targetRentPerSqm = perSqm(targetRent, area);
       currentRentPerSqm = perSqm(coreIstMonthly, area);
       monthlyRent = scaleRent(sollCore + parkingRentMonthly);
-      coreAnnualRent = scaleRent(sollCore) * 12;
       rentalIncome = rent; // gesamte Ist-Miete inkl. Stellplatz
     } else {
       parkingRentMonthly = parkingRentS;
@@ -102,7 +112,6 @@ function context(kind, inputs, options = {}) {
       targetRentPerSqm = perSqm(targetRent, area);
       currentRentPerSqm = perSqm(rent, area);
       monthlyRent = scaleRent(sollRent + parkingRentMonthly);
-      coreAnnualRent = scaleRent(sollRent) * 12;
       rentalIncome = rent + parkingRentMonthly; // Ist-Miete, nicht Soll-Miete; Szenario ändert sie nicht
     }
   } else if (kind === KIND.KAP) {
@@ -112,11 +121,9 @@ function context(kind, inputs, options = {}) {
       parkingRentMonthly = Math.min(parkingRentS, total);
       coreIstMonthly = total - parkingRentMonthly;
       monthlyRent = scaleRent(total);
-      coreAnnualRent = scaleRent(coreIstMonthly) * 12;
     } else {
       parkingRentMonthly = parkingRentS;
       monthlyRent = scaleRent(total + parkingRentMonthly);
-      coreAnnualRent = scaleRent(total) * 12;
     }
     currentRentPerSqm = rentPerSqm;
   } else if (kind === KIND.WG) {
@@ -125,28 +132,28 @@ function context(kind, inputs, options = {}) {
       parkingRentMonthly = Math.min(parkingRentS, roomsRent);
       coreIstMonthly = roomsRent - parkingRentMonthly;
       monthlyRent = scaleRent(roomsRent);
-      coreAnnualRent = scaleRent(coreIstMonthly) * 12;
     } else {
       parkingRentMonthly = parkingRentS;
       monthlyRent = scaleRent(roomsRent + parkingRentMonthly);
-      coreAnnualRent = scaleRent(roomsRent) * 12;
     }
   }
+  // Gesamtmiete inkl. Stellplatz pro Jahr: Grundlage der Rendite-Grenze und der Rendite des Käufers.
   const annualRent = monthlyRent === null ? null : monthlyRent * 12;
 
-  // Schritt 2: Verkaufspreis der Wohnung. Rendite-Grenze nur aus der Kernmiete, ohne Stellplatz.
-  // Der Stellplatz-Verkaufspreis wird nicht zu den Grenzen addiert, sondern erst als Zusatz (salePriceTotal).
+  // Schritt 2: Verkaufspreis des Pakets (Wohnung + Stellplatz). Beide Grenzen gelten inkl. Stellplatz.
   const minYield = read(inputs, 'minYield');
   const maxPerSqm = read(inputs, 'maxSalePricePerSqm');
+  // Rendite-Grenze: Gesamtmiete inkl. Stellplatzmiete ÷ Mindestrendite des Käufers.
   let yieldLimit = null;
-  if (kind !== KIND.EN && minYield > 0 && coreAnnualRent > 0) {
-    yieldLimit = finiteOrNull(coreAnnualRent / (minYield / 100));
+  if (kind !== KIND.EN && minYield > 0 && annualRent !== null && annualRent > 0) {
+    yieldLimit = finiteOrNull(annualRent / (minYield / 100));
   }
-  // m²-Deckel: nur Wohnung × Deckel.
+  // m²-Verkaufsgrenze: Wohnfläche × max. Verkaufspreis je m², plus Verkaufspreis Stellplatz/Garage. Ohne Preis je m² (0) keine Grenze.
   let capLimit = null;
-  if (maxPerSqm > 0 && area > 0) capLimit = area * maxPerSqm;
+  if (maxPerSqm > 0 && area > 0) capLimit = area * maxPerSqm + parkingSalePrice;
 
   const candidates = [yieldLimit, capLimit].filter((x) => x !== null);
+  // Gesamtverkaufspreis inkl. Stellplatz: der kleinere Wert der beiden Grenzen.
   const salePrice = candidates.length > 0 ? Math.min(...candidates) : null;
 
   let limit = null;
@@ -161,12 +168,11 @@ function context(kind, inputs, options = {}) {
     limit = LIMIT.CAP;
   }
   const capMissing = maxPerSqm === 0;
-  const salePricePerSqm = salePrice === null ? null : perSqm(salePrice, area);
-  // Verkaufspreis mit Stellplatz: nur Zusatz zum Verkauf, der Einkaufspreis hängt nicht davon ab.
-  const salePriceTotal = salePrice === null ? null : salePrice + parkingSalePrice;
-  // Rendite Käufer: Jahresmiete inkl. separater Stellplatzmiete, geteilt durch den Kaufpreis inkl. Stellplatz.
-  const buyerYield = kind !== KIND.EN && salePriceTotal !== null && salePriceTotal > 0
-    ? finiteOrNull((annualRent / salePriceTotal) * 100)
+  // Wohnungsanteil je m²: Verkaufspreis ohne Stellplatz-Verkaufspreis, nie unter 0.
+  const salePricePerSqm = salePrice === null ? null : perSqm(Math.max(0, salePrice - parkingSalePrice), area);
+  // Rendite Käufer: Jahresmiete inkl. Stellplatzmiete, geteilt durch den Gesamtverkaufspreis inkl. Stellplatz.
+  const buyerYield = kind !== KIND.EN && annualRent !== null && salePrice !== null && salePrice > 0
+    ? finiteOrNull((annualRent / salePrice) * 100)
     : null;
 
   // Schritt 3: Kosten
@@ -186,8 +192,6 @@ function context(kind, inputs, options = {}) {
   const v = read(inputs, 'salesCommissionPercent') / 100;
   const salesCommission = salePrice === null ? null : salePrice * v;
   const saleNet = salePrice === null ? null : salePrice * (1 - v);
-  // Stellplatz-Verkaufspreis nach Vertriebskosten: zusätzlicher Gewinn, nicht Teil der Marge der Wohnung.
-  const parkingNet = parkingSalePrice * (1 - v);
 
   // Schritt 4: Marge
   const targetMargin = read(inputs, 'targetMargin');
@@ -196,7 +200,7 @@ function context(kind, inputs, options = {}) {
   const effectiveMargin = softened ? targetMargin : Math.max(targetMargin, RULE_MARGIN);
   const m = effectiveMargin / 100;
 
-  // Maximaler Einkaufspreis: saleNet = (1 + m) × GIK mit GIK = EK (1 + p + φ) + S + O + H
+  // Maximaler Einkaufspreis (inkl. Stellplatz): saleNet = (1 + m) × GIK mit GIK = EK (1 + p + φ) + S + O + H
   let maxPurchasePriceExact = null;
   if (saleNet !== null) {
     maxPurchasePriceExact = finiteOrNull((saleNet / (1 + m) - renovationTotal - otherCosts - holdingCosts) / (1 + p + phi));
@@ -221,8 +225,6 @@ function context(kind, inputs, options = {}) {
     capLimit,
     salePrice,
     salePricePerSqm,
-    salePriceTotal,
-    parkingNet,
     limit,
     buffer,
     capMissing,
@@ -248,6 +250,7 @@ function context(kind, inputs, options = {}) {
     v,
     effectiveMargin,
     softenedActive,
+    greenThreshold: greenThreshold(inputs),
     maxPurchasePriceExact,
     maxPurchasePrice,
     bidRecommendation,
@@ -256,7 +259,7 @@ function context(kind, inputs, options = {}) {
 }
 
 /**
- * Vorwärtsrechnung für einen beliebigen Einkaufspreis P (gleiche Formeln wie compute).
+ * Vorwärtsrechnung für einen beliebigen Einkaufspreis P (gleiche Formeln wie compute). P ist der Preis inkl. Stellplatz.
  * Ohne Verkaufspreis sind profit und marginPercent null und die Ampel rot.
  */
 function evaluateWith(c, P) {
@@ -271,18 +274,12 @@ function evaluateWith(c, P) {
   const profit = hasSale ? c.saleNet - totalInvestment : null;
   const marginPercent = hasSale && totalInvestment > 0 ? (profit / totalInvestment) * 100 : null;
   const ampel = trafficLight(marginPercent, profit, c.inputs);
-  const requiredSalePrice = c.v < 1 ? ((1 + RULE_MARGIN / 100) * totalInvestment) / (1 - c.v) : null;
-  // Gewinn mit Stellplatz: Gewinn der Wohnung plus Stellplatz-Verkaufspreis nach Vertriebskosten.
-  const profitTotal = hasSale ? profit + c.parkingNet : null;
-  const marginTotalPercent = hasSale && totalInvestment > 0 ? finiteOrNull((profitTotal / totalInvestment) * 100) : null;
+  // Verkaufspreis inkl. Stellplatz, der für die grüne Marge nötig wäre (Zielmarge, mindestens 20 %).
+  const requiredSalePrice = c.v < 1 ? ((1 + c.greenThreshold / 100) * totalInvestment) / (1 - c.v) : null;
 
   return {
     purchasePrice: P,
     parkingSalePrice: c.parkingSalePrice,
-    parkingNet: c.parkingNet,
-    salePriceTotal: c.salePriceTotal,
-    profitTotal,
-    marginTotalPercent,
     closingCosts,
     closingBreakdown: {
       broker: P * (read(c.inputs, 'brokerPercent') / 100),
@@ -318,8 +315,6 @@ function unpricedEvaluation() {
     totalInvestment: null,
     profit: null,
     marginPercent: null,
-    profitTotal: null,
-    marginTotalPercent: null,
     ampel: AMPEL.RED,
     purchasePricePerSqm: null,
     totalInvestmentPerSqm: null,
@@ -329,11 +324,12 @@ function unpricedEvaluation() {
 }
 
 /**
- * Ampel: grün ab Regelmarge; gelb nur bei aufgeweichter Marge (ab Untergrenze und Mindestgewinn); sonst rot.
+ * Ampel: grün ab der grünen Marge (greenThreshold: Zielmarge, mindestens 20 %); gelb nur bei aufgeweichter Marge
+ * (ab Untergrenze und Mindestgewinn) und nur, wenn nicht grün; sonst rot.
  */
 export function trafficLight(marginPercent, profit, inputs) {
   if (typeof marginPercent !== 'number' || !Number.isFinite(marginPercent)) return AMPEL.RED;
-  if (marginPercent >= RULE_MARGIN - 1e-9) return AMPEL.GREEN;
+  if (marginPercent >= greenThreshold(inputs) - 1e-9) return AMPEL.GREEN;
   if (
     inputs?.softened === true
     && marginPercent >= read(inputs, 'marginFloor') - 1e-9
@@ -347,7 +343,7 @@ export function trafficLight(marginPercent, profit, inputs) {
 
 /**
  * Vorwärtsrechnung für einen Einkaufspreis P. Liefert Nebenkosten, Finanzierung, GIK, Gewinn, Marge,
- * Ampel und die Verkaufspreise, die für 20 % Marge nötig wären.
+ * Ampel und den Verkaufspreis inkl. Stellplatz, der für die grüne Marge nötig wäre.
  */
 export function evaluatePurchase(kind, inputs, purchasePrice) {
   const P = Number.isFinite(purchasePrice) ? purchasePrice : 0;
@@ -355,7 +351,7 @@ export function evaluatePurchase(kind, inputs, purchasePrice) {
 }
 
 /**
- * Berechnung aller Ergebnisse. Der Max. Einkaufspreis ist das einzige berechnete Preisergebnis.
+ * Berechnung aller Ergebnisse. Der Max. Einkaufspreis ist das einzige berechnete Preisergebnis und gilt inkl. Stellplatz.
  * options ist intern (Szenarien): { rentFactor, renovationFactor }.
  */
 export function compute(kind, inputs, options = {}) {
@@ -386,8 +382,6 @@ export function compute(kind, inputs, options = {}) {
     salePrice: c.salePrice,
     salePricePerSqm: c.salePricePerSqm,
     parkingSalePrice: c.parkingSalePrice,
-    parkingNet: c.parkingNet,
-    salePriceTotal: c.salePriceTotal,
     limit: c.limit,
     buffer: c.buffer,
     capMissing: c.capMissing,
@@ -407,6 +401,7 @@ export function compute(kind, inputs, options = {}) {
     saleNet: c.saleNet,
     effectiveMargin: c.effectiveMargin,
     softenedActive: c.softenedActive,
+    greenThreshold: c.greenThreshold,
     maxPurchasePriceExact: exact,
     maxPurchasePrice: c.maxPurchasePrice,
     maxPurchasePricePerSqm: perSqm(c.maxPurchasePrice, c.area),

@@ -24,14 +24,19 @@ const SOFTENED_ONLY = Object.freeze(['marginFloor', 'minProfit']);
 const PARKING_RENT_ONLY = Object.freeze(['parkingRent', 'parkingCount']);
 const AMPEL_LABEL = Object.freeze({ [AMPEL.GREEN]: 'Grün', [AMPEL.YELLOW]: 'Gelb', [AMPEL.RED]: 'Rot' });
 const LIMIT_TEXT = Object.freeze({
-  [LIMIT.CAP]: 'm²-Deckel greift',
+  [LIMIT.CAP]: 'm²-Verkaufsgrenze greift',
   [LIMIT.YIELD]: 'Rendite-Grenze greift',
   [LIMIT.BOTH]: 'Beide Grenzen gleich',
 });
 
-/** Kurzer Grund zur Ampel. Ohne berechenbare Marge: „Nicht berechenbar“. */
-function ampelText(ampel, margin) {
-  if (ampel === AMPEL.GREEN) return `Marge ab ${RULE_MARGIN} %`;
+/** Marge als Text für Anzeige und Berichtszeilen: ganze Zahl ohne Nachkommastelle („20“, „25“), sonst eine („22,5“). */
+function marginText(x) {
+  return Fmt.fieldNumber(x, Number.isInteger(x) ? 0 : 1);
+}
+
+/** Kurzer Grund zur Ampel. Grün ab der grünen Marge (Zielmarge, mindestens 20 %). Ohne berechenbare Marge: „Nicht berechenbar“. */
+function ampelText(ampel, margin, threshold) {
+  if (ampel === AMPEL.GREEN) return `Marge ab ${marginText(threshold)} %`;
   if (ampel === AMPEL.YELLOW) return 'Aufgeweicht, Mindestgewinn erreicht';
   return margin === null ? 'Nicht berechenbar' : 'Marge unter der Regel';
 }
@@ -85,17 +90,18 @@ export function presentResult(session) {
     ? Fmt.perSqm(value / flaeche)
     : DASH);
 
-  // notes: Hinweistexte. noteHelp: je Hinweis der Erklärtext (gleiche Länge). Nur die Deckel-Hinweise haben einen.
+  // notes: Hinweistexte. noteHelp: je Hinweis der Erklärtext (gleiche Länge). Nur die Hinweise zur m²-Verkaufsgrenze haben einen.
   const notes = [];
   const noteHelp = [];
   const add = (text, help = '') => {
     notes.push(text);
     noteHelp.push(help);
   };
-  const deckelHelp = FIELDS.maxSalePricePerSqm.help ?? '';
-  // Ohne Deckel (Vermietet, KAP, WG) kein eigener Hinweis mehr: Die Erklärung steht als „?“ hinter „Rendite-Grenze greift“.
+  // Erklärtext zur m²-Verkaufsgrenze (Feldhilfe von maxSalePricePerSqm).
+  const capHelp = FIELDS.maxSalePricePerSqm.help ?? '';
+  // Ohne m²-Verkaufsgrenze (Vermietet, KAP, WG) kein eigener Hinweis mehr: Die Erklärung steht als „?“ hinter „Rendite-Grenze greift“.
   if (r.capMissing && s.calc.kind === KIND.EN) {
-    add('Bitte den max. Verkaufspreis je m² eingeben.', deckelHelp);
+    add('Bitte den max. Verkaufspreis je m² eingeben.', capHelp);
   }
   if (r.softenedActive) {
     add(`Aufgeweicht: ${Fmt.fieldNumber(r.effectiveMargin, 1)}${NBSP}% statt ${RULE_MARGIN}${NBSP}%`);
@@ -109,27 +115,20 @@ export function presentResult(session) {
   if (r.buffer !== null && r.limit === LIMIT.CAP) {
     bufferText = `Puffer ${Fmt.euro(r.buffer)} bis zur Rendite-Grenze`;
   } else if (r.buffer !== null && r.limit === LIMIT.YIELD) {
-    bufferText = `Puffer ${Fmt.euro(r.buffer)} bis zum m²-Deckel`;
+    bufferText = `Puffer ${Fmt.euro(r.buffer)} bis zur m²-Verkaufsgrenze`;
   }
-
-  // Zusatzzeile mit Stellplatz: Verkaufspreis, Gewinn und Marge inkl. Stellplatz-Verkaufspreis. Leer ohne Stellplatz-Verkaufspreis.
-  // Ohne möglichen Ankauf im Modus Maximum keine Zeile, da dort auch Gewinn und Marge fehlen.
-  const totalBasis = useOffer ? offer : (maxOk ? r : null);
-  const parkingValues = r.parkingSalePrice > 0 && r.salePriceTotal !== null && totalBasis !== null
-    ? `Verkaufspreis ${Fmt.euro(r.salePriceTotal)} · Gewinn ${Fmt.euro(totalBasis.profitTotal)} · Marge ${Fmt.percent(totalBasis.marginTotalPercent)}`
-    : '';
 
   return {
     mode: s.mode,
-    parkingValues,
-    parkingLine: parkingValues === '' ? '' : `Mit Stellplatz: ${parkingValues}`,
+    // Beschriftung der Zeile „Nötiger Verkaufspreis …“: die grüne Marge (Zielmarge, mindestens 20 %).
+    requiredLabel: `Nötiger Verkaufspreis für ${marginText(r.greenThreshold)} %`,
     maxPrice: maxOk ? Fmt.euro(r.maxPurchasePrice) : DASH,
     // compute liefert ohne Einkaufspreis 0 statt null (perSqm(null, Fläche)); hier abgefangen.
     maxPricePerSqm: maxOk ? Fmt.perSqm(r.maxPurchasePricePerSqm) : DASH,
     bid: r.bidRecommendation === null ? '' : `Gebot bis ${Fmt.euro(r.bidRecommendation)}`,
     ampel,
     ampelLabel: AMPEL_LABEL[ampel] ?? DASH,
-    ampelText: ampelText(ampel, margin),
+    ampelText: ampelText(ampel, margin, r.greenThreshold),
     margin: Fmt.percent(margin),
     profit: Fmt.euro(basis.profit),
     profitPerSqm: perSqmOf(basis.profit),
@@ -140,8 +139,8 @@ export function presentResult(session) {
     buyerYield: Fmt.percent(r.buyerYield),
     limitText: Object.hasOwn(LIMIT_TEXT, r.limit) ? LIMIT_TEXT[r.limit] : '',
     bufferText,
-    // Erklärung zur Grenze (Rendite-Grenze / m²-Deckel), als „?“ hinter limitText.
-    limitHelp: Object.hasOwn(LIMIT_TEXT, r.limit) && LIMIT_TEXT[r.limit] ? deckelHelp : '',
+    // Erklärung zur Grenze (Rendite-Grenze / m²-Verkaufsgrenze), als „?“ hinter limitText.
+    limitHelp: Object.hasOwn(LIMIT_TEXT, r.limit) && LIMIT_TEXT[r.limit] ? capHelp : '',
     notes,
     noteHelp,
     offer: useOffer
@@ -219,10 +218,16 @@ export function fieldHint(session, key) {
       }
       return r.currentRentPerSqm === null ? '' : Fmt.perSqm(r.currentRentPerSqm);
     case 'parkingRent': {
-      if (r.parkingMode === PARKING_MODE.SEPARAT) return 'Kommt zur Kaltmiete dazu · zählt nur für die Rendite des Käufers';
-      if (r.parkingMode !== PARKING_MODE.INKL || r.parkingCoreMonthly === null) return '';
+      if (r.parkingMode === PARKING_MODE.KEINE) return '';
+      // Stellplatzmiete gesamt pro Monat (bei WG × Anzahl Stellplätze). Ohne Betrag ist der Modus unvollständig.
+      const parkingSum = kind === KIND.WG
+        ? (inputs.parkingCount || 0) * (inputs.parkingRent || 0)
+        : (inputs.parkingRent || 0);
+      if (parkingSum <= 0) return 'Bitte Stellplatzmiete eintragen';
+      if (r.parkingMode === PARKING_MODE.SEPARAT) return 'Kommt zur Kaltmiete dazu · zählt für Verkaufspreis und Rendite des Käufers';
+      if (r.parkingCoreMonthly === null) return '';
       const perSqm = inputs.livingArea > 0 ? ` · ${Fmt.perSqm(r.parkingCoreMonthly / inputs.livingArea)}` : '';
-      return `Wohnung ${Fmt.euro(r.parkingCoreMonthly)}${perSqm} · nur damit wird der Einkaufspreis gerechnet`;
+      return `Wohnung ${Fmt.euro(r.parkingCoreMonthly)}${perSqm}`;
     }
     case 'rentPerSqm':
       // Gesamtmiete der Wohnung im Monat (Miete je m² × Wohnfläche).
@@ -233,12 +238,17 @@ export function fieldHint(session, key) {
       return inputs.otherCosts > 0 && inputs.livingArea > 0
         ? Fmt.perSqm(inputs.otherCosts / inputs.livingArea)
         : '';
-    case 'minYield':
-      // Grenze der Wohnung allein (ohne Stellplatz/Garage).
-      return r.yieldLimit === null ? '' : `Rendite-Grenze ${Fmt.euro(r.yieldLimit)}`;
+    case 'minYield': {
+      // Rendite-Grenze aus der Gesamtmiete inkl. Stellplatzmiete (wenn vermietet).
+      if (r.yieldLimit === null) return '';
+      const withParking = r.parkingMode !== PARKING_MODE.KEINE && r.parkingRentAnnual > 0;
+      return `Rendite-Grenze ${Fmt.euro(r.yieldLimit)}${withParking ? ' · inkl. Stellplatz' : ''}`;
+    }
     case 'maxSalePricePerSqm':
-      if (r.capLimit !== null) return `m²-Deckel ${Fmt.euro(r.capLimit)}`;
-      return inputs.maxSalePricePerSqm === 0 ? '0 = kein Deckel' : '';
+      if (r.capLimit !== null) {
+        return `m²-Verkaufsgrenze ${Fmt.euro(r.capLimit)}${inputs.parkingSalePrice > 0 ? ' · inkl. Stellplatz' : ''}`;
+      }
+      return inputs.maxSalePricePerSqm === 0 ? '0 = keine m²-Verkaufsgrenze' : '';
     case 'renovationCosts': {
       const perSqm = inputs.livingArea > 0 ? inputs.renovationCosts / inputs.livingArea : null;
       const base = `Sanierung ${Fmt.perSqm(perSqm)}`;
@@ -250,11 +260,14 @@ export function fieldHint(session, key) {
       return `Summe ${Fmt.percent(r.knkSumPercent)} · gerechnet mit ${Fmt.fieldNumber(r.knkPercent, 0)}${NBSP}%`;
     case 'parkingSalePrice': {
       if (inputs.parkingSalePrice <= 0 || r.salePrice === null) return '';
-      const text = `Zusätzlicher Gewinn ${Fmt.euro(r.parkingNet)} · ändert den Einkaufspreis nicht`;
-      if (r.parkingMode === PARKING_MODE.SEPARAT && r.parkingRentAnnual > 0) {
-        return `${text} · Rendite Stellplatz ${Fmt.percent(r.parkingRentAnnual / inputs.parkingSalePrice * 100)}`;
+      if (kind === KIND.EN) return 'Kommt zum Verkaufspreis dazu';
+      if (r.limit === LIMIT.YIELD) {
+        // Bei vermieteter Wohnung steckt der Stellplatz über seine Miete schon in der Rendite-Grenze.
+        return r.parkingRentAnnual > 0
+          ? 'Steckt über die Stellplatzmiete schon im Verkaufspreis · zählt nur für die m²-Verkaufsgrenze'
+          : 'Zählt nur für die m²-Verkaufsgrenze';
       }
-      return text;
+      return 'In der m²-Verkaufsgrenze enthalten';
     }
     case 'durationMonths': {
       const financing = useOffer ? r.offer.financingCosts : r.financingCosts;
@@ -368,7 +381,7 @@ export function presentReport(session, now = new Date()) {
       ['Max. Einkaufspreis', `${r.maxPrice} · ${r.maxPricePerSqm}`],
       ['GIK', `${r.gik} · ${r.gikPerSqm}`],
       ['Verkaufspreis', `${r.salePrice} · ${r.salePricePerSqm}`],
-      ['Nötiger Verkaufspreis für 20 %', `${r.offer.requiredSalePrice} · ${r.offer.requiredSalePricePerSqm}`],
+      [r.requiredLabel, `${r.offer.requiredSalePrice} · ${r.offer.requiredSalePricePerSqm}`],
     );
   } else {
     result.push(
@@ -380,7 +393,6 @@ export function presentReport(session, now = new Date()) {
   }
   const limit = limitRow(r);
   if (limit) result.push(limit);
-  if (r.parkingValues !== '') result.push(['Mit Stellplatz', r.parkingValues]);
 
   const sections = [{ title: 'Ergebnis', rows: result }];
 

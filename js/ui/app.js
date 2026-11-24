@@ -469,7 +469,7 @@ function buildForm() {
       addWidget(body, spec.unit === 'bool' ? switchRow(spec.key)
         : spec.unit === 'choice' ? choiceRow(spec.key)
           : numberRow(spec.key));
-      // Richtpreis-Block direkt nach dem Verkaufspreis je m² (Deckel).
+      // Richtpreis-Block direkt nach dem Verkaufspreis je m² (m²-Verkaufsgrenze).
       if (spec.key === 'maxSalePricePerSqm') addWidget(body, createPriceBox(ctx));
     }
     if (isSzenarien) {
@@ -539,9 +539,9 @@ function limitLine(r) {
   // Nur das „?“ hinter der Zeile; die Erklärung erscheint beim Antippen als Pop-up über der Seite.
   const button = el('button', 'help-btn');
   button.type = 'button';
-  button.setAttribute('aria-label', 'Erklärung: Rendite-Grenze und m²-Deckel');
+  button.setAttribute('aria-label', 'Erklärung: Rendite-Grenze und m²-Verkaufsgrenze');
   button.setAttribute('aria-haspopup', 'dialog');
-  button.addEventListener('click', () => showHelpPopup('Rendite-Grenze und m²-Deckel', r.limitHelp));
+  button.addEventListener('click', () => showHelpPopup('Rendite-Grenze und m²-Verkaufsgrenze', r.limitHelp));
   line.append(' ', button);
   return line;
 }
@@ -571,11 +571,6 @@ function showHelpPopup(title, text) {
   dlg.querySelector('.help-dialog-text').textContent = text;
   if (typeof dlg.showModal === 'function') dlg.showModal();
   else dlg.setAttribute('open', '');
-}
-
-/** Zeile „Mit Stellplatz: …“ nur bei Stellplatz-Verkaufspreis. */
-function parkingLineNode(r) {
-  return r.parkingLine ? el('p', 'limit', r.parkingLine) : null;
 }
 
 /** Hinweise stehen außerhalb der Karte, in #result-notes. */
@@ -622,7 +617,7 @@ function maxView(r, kind) {
     cell('GIK', r.gik, r.gikPerSqm),
   );
   if (kind !== 'en') cells.append(cell('Rendite Käufer', r.buyerYield));
-  return [hero, verdict(r), cells, limitLine(r), parkingLineNode(r)].filter(Boolean);
+  return [hero, verdict(r), cells, limitLine(r)].filter(Boolean);
 }
 
 /** Ansicht „Angebot prüfen“ mit Angebotspreis: Marge und Gewinn beim Angebot nebeneinander (schmal untereinander). */
@@ -639,9 +634,9 @@ function offerView(r) {
     cell('Max. Einkaufspreis', r.maxPrice, r.maxPricePerSqm),
     cell('GIK', r.gik, r.gikPerSqm),
     cell('Verkaufspreis', r.salePrice, r.salePricePerSqm),
-    cell('Nötiger Verkaufspreis für 20 %', r.offer.requiredSalePrice, r.offer.requiredSalePricePerSqm),
+    cell(r.requiredLabel, r.offer.requiredSalePrice, r.offer.requiredSalePricePerSqm),
   );
-  return [hero, verdict(r), el('p', 'delta', r.offer.deltaText), cells, limitLine(r), parkingLineNode(r)].filter(Boolean);
+  return [hero, verdict(r), el('p', 'delta', r.offer.deltaText), cells, limitLine(r)].filter(Boolean);
 }
 
 function renderResult() {

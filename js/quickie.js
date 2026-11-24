@@ -171,9 +171,9 @@ export function presentQuickie(inputs, vorgaben) {
     }
   }
 
-  // Hinweis: der Deckel bindet, wenn die neue Miete je m² über dem Umschaltpunkt liegt.
+  // Hinweis: die m²-Verkaufsgrenze bindet, wenn die neue Miete je m² über dem Umschaltpunkt liegt.
   const hinweis = ok && c.mNeu / c.A > c.umschalt + 1e-9
-    ? `Neue Miete ${sqm(c.mNeu / c.A, 2)} liegt über ${sqm(c.umschalt, 2)}. Der Deckel bindet: ${eur(c.mNeu - c.umschalt * c.A)} pro Monat der Erhöhung bringen beim Verkauf nichts.`
+    ? `Neue Miete ${sqm(c.mNeu / c.A, 2)} liegt über ${sqm(c.umschalt, 2)}. Die m²-Verkaufsgrenze bindet: ${eur(c.mNeu - c.umschalt * c.A)} pro Monat der Erhöhung bringen beim Verkauf nichts.`
     : null;
 
   // Übersicht
@@ -191,7 +191,7 @@ export function presentQuickie(inputs, vorgaben) {
   const rechenweg = ok ? [
     `Neue Miete: ${cur2(c.miete)} × ${num(1 + c.e, 2)} = ${num(c.mNeu, 2)}${NB}€/Monat`,
     `Wert über Rendite: ${eur(c.jNeu)} ÷ ${num(v.r, 1)}${NB}% = ${eur(c.vpRendite)}`,
-    `Wert über Deckel: ${num(v.deckel, 0)} × ${num(c.A, 0)} m² = ${eur(c.vpDeckel)}`,
+    `Wert über m²-Verkaufsgrenze: ${num(v.deckel, 0)} × ${num(c.A, 0)} m² = ${eur(c.vpDeckel)}`,
     `Verkaufspreis = kleinerer Wert = ${eur(c.vp)}`,
     `Max. Kaufpreis = (${eur(c.vp)} − ${eur(v.halte)} − ${eur(v.z1)}) ÷ ${num(1 + c.nk, 2)} = ${eur(c.k1)}`,
     `Max. Kaufpreis ${plain(v.marge)}% Marge = (${eur(c.vp)} ÷ ${num(1 + c.m, 2)} − ${eur(v.halte)}) ÷ ${num(1 + c.nk, 2)} = ${eur(c.k3)}`,
